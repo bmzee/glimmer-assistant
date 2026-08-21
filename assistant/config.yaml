@@ -1,0 +1,6 @@
+# llm_base_url: http://localhost:11434/v1
+# llm_model: muse-glimmer:30b
+# max_iterations: 15
+# tool_result_max_chars: 16000
+# allowed_roots: ["~"]
+# log_path: ~/.glimmer-assistant/actions.jsonl
