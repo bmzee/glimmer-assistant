@@ -48,8 +48,11 @@ def main() -> None:
     while True:
         try:
             text = input("> ").strip()
-        except EOFError:
+        except (EOFError, KeyboardInterrupt):
             print()
             break
         if text:
-            print(loop.run(text))
+            try:
+                print(loop.run(text))
+            except Exception as e:
+                print(f"error: {e}")
