@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -23,3 +24,10 @@ def test_outside_root_rejected(tmp_path: Path):
 def test_dotdot_escape_rejected(tmp_path: Path):
     with pytest.raises(PathNotAllowedError):
         resolve_safe(str(tmp_path / ".." / ".."), [tmp_path])
+
+
+def test_symlink_escape_rejected(tmp_path: Path):
+    link = tmp_path / "link"
+    os.symlink(tmp_path.parent, link)
+    with pytest.raises(PathNotAllowedError):
+        resolve_safe(str(link), [tmp_path])
