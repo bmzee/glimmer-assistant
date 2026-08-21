@@ -25,4 +25,17 @@ def load_config(path: str | Path | None = None) -> Config:
     for key, value in data.items():
         if hasattr(cfg, key):
             setattr(cfg, key, value)
+    _normalize_allowed_roots(cfg)
     return cfg
+
+
+def _normalize_allowed_roots(cfg: Config) -> None:
+    value = cfg.allowed_roots
+    if isinstance(value, str):
+        cfg.allowed_roots = [value]
+    elif isinstance(value, list) and all(isinstance(v, str) for v in value):
+        pass
+    else:
+        raise ValueError(
+            f"config key 'allowed_roots' must be a string or a list of strings, got {value!r}"
+        )

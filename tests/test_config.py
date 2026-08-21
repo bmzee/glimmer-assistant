@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from assistant.config import Config, load_config
 
 
@@ -26,3 +28,17 @@ def test_unknown_keys_ignored(tmp_path: Path):
     f.write_text("not_a_real_key: 1\n")
     cfg = load_config(f)
     assert not hasattr(cfg, "not_a_real_key")
+
+
+def test_allowed_roots_scalar_string_is_wrapped(tmp_path: Path):
+    f = tmp_path / "config.yaml"
+    f.write_text("allowed_roots: /tmp/x\n")
+    cfg = load_config(f)
+    assert cfg.allowed_roots == ["/tmp/x"]
+
+
+def test_allowed_roots_invalid_type_raises(tmp_path: Path):
+    f = tmp_path / "config.yaml"
+    f.write_text("allowed_roots: 42\n")
+    with pytest.raises(ValueError):
+        load_config(f)
