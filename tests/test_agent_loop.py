@@ -143,6 +143,34 @@ def test_iteration_cap(tmp_path):
     assert "step limit" in out
 
 
+def test_parallel_tool_calls_both_executed(tmp_path):
+    calls = []
+
+    def echo(args):
+        calls.append(args)
+        return f"echoed {args}"
+
+    llm = FakeLLM(
+        [
+            assistant_msg(
+                tool_calls=[
+                    tool_call("c1", "echo", {"v": 1}),
+                    tool_call("c2", "echo", {"v": 2}),
+                ]
+            ),
+            assistant_msg(content="done"),
+        ]
+    )
+    loop = make_loop(tmp_path, llm, make_registry(echo))
+    assert loop.run("go") == "done"
+    assert calls == [{"v": 1}, {"v": 2}]
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    assert tool_msgs == [
+        {"role": "tool", "tool_call_id": "c1", "content": "echoed {'v': 1}"},
+        {"role": "tool", "tool_call_id": "c2", "content": "echoed {'v': 2}"},
+    ]
+
+
 def test_tool_returns_none(tmp_path):
     def returns_none(args):
         return None

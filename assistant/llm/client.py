@@ -7,7 +7,9 @@ from assistant.config import Config
 
 class LLMClient:
     def __init__(self, cfg: Config, client=None):
-        self._client = client or OpenAI(base_url=cfg.llm_base_url, api_key=cfg.llm_api_key)
+        self._client = (
+            client if client is not None else OpenAI(base_url=cfg.llm_base_url, api_key=cfg.llm_api_key)
+        )
         self._model = cfg.llm_model
 
     def chat(self, messages: list[dict], tools: list[dict]):

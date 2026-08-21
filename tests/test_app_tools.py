@@ -1,5 +1,4 @@
 from pathlib import Path
-from unittest.mock import patch
 
 from assistant.tools.adapters.mac import MacAdapter
 from assistant.tools.adapters.base import PlatformAdapter
