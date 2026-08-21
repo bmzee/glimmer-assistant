@@ -1,5 +1,7 @@
 from pathlib import Path
+from unittest.mock import patch
 
+from assistant.tools.adapters.mac import MacAdapter
 from assistant.tools.adapters.base import PlatformAdapter
 from assistant.tools.apps import make_app_tools
 from assistant.tools.registry import RiskTier
@@ -50,3 +52,31 @@ def test_tiers():
     adapter = FakeAdapter()
     for tool in make_app_tools(adapter, []):
         assert tool.risk_tier == RiskTier.UNDO
+
+
+def test_mac_adapter_launch_app_handles_oserror(monkeypatch):
+    """MacAdapter catches OSError from subprocess.run and returns ERROR string."""
+    adapter = MacAdapter()
+    monkeypatch.setattr(
+        "assistant.tools.adapters.mac.subprocess.run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            FileNotFoundError("open binary not found")
+        ),
+    )
+    result = adapter.launch_app("Notes")
+    assert result.startswith("ERROR:")
+    assert isinstance(result, str)
+
+
+def test_mac_adapter_open_path_handles_oserror(monkeypatch):
+    """MacAdapter catches OSError from subprocess.run and returns ERROR string."""
+    adapter = MacAdapter()
+    monkeypatch.setattr(
+        "assistant.tools.adapters.mac.subprocess.run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            OSError("subprocess error")
+        ),
+    )
+    result = adapter.open_path("/some/path")
+    assert result.startswith("ERROR:")
+    assert isinstance(result, str)
