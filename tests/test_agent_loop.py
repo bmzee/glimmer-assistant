@@ -141,3 +141,19 @@ def test_iteration_cap(tmp_path):
     loop = make_loop(tmp_path, llm, make_registry(lambda a: "x"), max_iterations=3)
     out = loop.run("go")
     assert "step limit" in out
+
+
+def test_tool_returns_none(tmp_path):
+    def returns_none(args):
+        return None
+
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "echo", {})]),
+            assistant_msg(content="ok"),
+        ]
+    )
+    loop = make_loop(tmp_path, llm, make_registry(returns_none))
+    loop.run("go")
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    assert tool_msgs[0]["content"].startswith("ERROR:")

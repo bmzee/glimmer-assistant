@@ -76,9 +76,9 @@ class AgentLoop:
             return "DENIED: the user did not approve this action."
         try:
             result = tool.func(args)
+            return self._truncate(result)
         except Exception as e:  # tool bugs must not kill the loop; the model retries
             return f"ERROR: {e}"
-        return self._truncate(result)
 
     def _truncate(self, s: str) -> str:
         if len(s) <= self._max_chars:
