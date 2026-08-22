@@ -45,7 +45,7 @@ Configuration (endpoint, model, allowed file roots) lives in `assistant/config.y
 3. ~~Voice pipeline — push-to-talk, Parakeet-MLX STT, Kokoro-ONNX TTS~~ ✅
 4. ~~Integrations — web (Playwright), Apple Calendar/Mail, Microsoft 365, Rule-of-Two elevation, spoken confirmation~~ ✅
 5. ~~Evals & quality — model A/B, context compaction, sentence-level TTS streaming, system-control tools~~ ✅
-6. Packaging — `.app` bundle so the assistant owns its own macOS permissions
+6. ~~Packaging — `.app` bundle so the assistant owns its own macOS permissions~~ ✅
 
 ### Where it stands
 
@@ -57,5 +57,12 @@ Configuration (endpoint, model, allowed file roots) lives in `assistant/config.y
   rejected. See [docs/latency.md](docs/latency.md).
 - **Spec coverage:** every clause audited, including what is *not* built, in
   [docs/spec-coverage.md](docs/spec-coverage.md).
+- **Permissions:** build the `.app` so macOS grants permissions to *the
+  assistant* rather than to your terminal — see [docs/packaging.md](docs/packaging.md).
+
+```bash
+python -m appbundle.build_app --python "$(pwd)/.venv/bin/python"
+open "dist/Glimmer Assistant.app"
+```
 
 Apache-2.0-friendly stack; built Mac-first with a platform-adapter layer for a Windows port.
