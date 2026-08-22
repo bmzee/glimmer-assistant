@@ -45,6 +45,7 @@ EXPECTED_OUTBOUND = {
     "send_mail",
     "m365_send_mail",
     "m365_create_event",
+    "fill_form_field",    # puts data INTO a remote page: exfiltration
 }
 
 # Tools that mutate or transmit MUST NOT be silently auto-approved.
@@ -56,6 +57,7 @@ MUST_NOT_BE_AUTO = {
     "m365_create_event",
     "run_shell",
     "quit_app",            # no Tier-1 undo window exists; unsaved work is unrecoverable
+    "fill_form_field",     # one step from submitting the form
 }
 
 

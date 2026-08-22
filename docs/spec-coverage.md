@@ -45,13 +45,13 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 | Clause | Status | Evidence |
 |---|---|---|
 | Registry declares `platforms` + `risk_tier` | ✅ | `assistant/tools/registry.py`; invariants table-tested. |
-| **PlatformAdapter: 8 methods** | ✗ | **2 of 8 built.** `launch_app`, `open_path` only. Missing: `quit_app`, `list_windows`, `focus_window`, `set_volume`, `screenshot`, `run_shell`. |
+| **PlatformAdapter: 8 methods** | ✅ | All built. `run_shell` deliberately stays in `tools/shell.py` — it must be sandbox-wrapped (§8.1), and routing a security boundary through a plain adapter method would weaken it. Documented on the ABC. |
 | MacAdapter: AppleScript primary | ✅ | `assistant/tools/apple.py` (Mail, Calendar), `adapters/mac.py`. |
 | MacAdapter: **AXUIElement accessibility reader** (`macapptree`) | ✗ | Not built. No generic UI-state reading. |
 | MacAdapter: App Intents / `shortcuts run` tertiary | ✗ | Not built. |
 | Handle TCC prompts gracefully | ✅ | `-1743` mapped to a remediation hint naming Automation settings. |
 | Web: Playwright, persistent profile, aria snapshots | ✅ | `assistant/tools/web.py`, `aria_snapshot()`. |
-| Web: `fill_form_field` (gated) | ✗ | Not built. |
+| Web: `fill_form_field` (gated) | ✅ | CONFIRM tier **and** `outbound=True` — it puts data into a remote page, so Rule-of-Two elevation must apply. Does not echo the filled value back into context. |
 | Email/calendar: Apple + M365 device-code | ✅ | `apple.py`, `msgraph.py`. |
 | **Pinned MCP servers** (4 named) | ✗ | Client exists (`mcp_client.py`) but **no server is adopted or configured**; the launcher is scaffolded and inert. None of the four named servers is in use. |
 | WindowsAdapter | ⏭️ | v2 per spec. |
@@ -73,7 +73,7 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 
 | Clause | Status | Evidence |
 |---|---|---|
-| TDD throughout | ✅ | 266 tests; guard tests proven to fail on their specific bug. |
+| TDD throughout | ✅ | 285 tests; guard tests proven to fail on their specific bug. |
 | Unit: tools, schema round-trip, gate, sandbox profile | ✅ | Including write-outside-scope and network-egress denial. |
 | Integration: canned responses; MCP against pinned versions | ⚠️ | Canned-response integration ✅. MCP-against-pinned-server ✗ (no server adopted). |
 | Model gate (a): structured output | ✅ | Passes; no GGUF pin needed. |
@@ -84,18 +84,22 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 
 ## Summary of real gaps
 
-**Capability gaps a user would notice:**
-1. **PlatformAdapter is 2/8** — no quit, window listing/focus, volume, or screenshot.
-2. **`fill_form_field`** — the assistant can read web pages but cannot fill anything in.
+**Closed in this pass:**
+- PlatformAdapter completed (quit/list-windows/focus/volume/screenshot). Two
+  bugs found only by live testing — both AppleScript, both invisible to the
+  twelve passing unit tests. See the commit for the -1700/-1719 detail.
+- `fill_form_field` built, gated CONFIRM + outbound.
 
-**Security clauses not met:**
-3. **MCP definition pinning** (§8.4) — unmet, though latent: no MCP server is adopted, so nothing is currently unpinned in practice.
-4. **Tier 1 undo window** (§8.3) — latent: no tool is Tier 1 today.
+**Security clauses still not met:**
+1. **MCP definition pinning** (§8.4) — unmet, though latent: no MCP server is
+   adopted, so nothing is currently unpinned in practice.
+2. **Tier 1 undo window** (§8.3) — latent: no tool is Tier 1 today. `quit_app`
+   was made CONFIRM rather than UNDO precisely because this is missing.
 
 **Acceptance gate not met:**
-5. **Voice latency 2.59s vs 2.5s** — 0.09s over, cause understood and documented.
+3. **Voice latency 2.59s vs 2.5s** — 0.09s over, cause understood, and the one
+   available fix measured and rejected (`docs/latency.md`).
 
 **Deliberately not built** (documented, with rationale): DFlash, streaming STT during hold, TTS fallbacks, AXUIElement reader, App Intents, MCP server adoption, Windows adapter.
 
-Items 1 and 2 are addressed in the follow-up work recorded below; 3–5 are
-recorded as known and open.
+Items 1–3 are recorded as known and open, not silently carried.
