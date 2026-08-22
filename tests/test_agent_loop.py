@@ -455,3 +455,53 @@ def test_escalation_with_parallel_tool_calls(tmp_path):
                     f"tool_call_id '{tool_call_id}' at msg #{msg_index} "
                     f"has no preceding parent"
                 )
+
+
+def test_failed_mutating_tool_gets_verification_hint(tmp_path):
+    from assistant.tools.registry import RiskTier, Tool, ToolRegistry
+
+    reg = ToolRegistry()
+    reg.register(
+        Tool(
+            name="mutate",
+            description="d",
+            parameters={"type": "object", "properties": {}, "required": []},
+            risk_tier=RiskTier.UNDO,
+            platforms=("darwin",),
+            func=lambda a: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+    )
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "mutate", {})]),
+            assistant_msg(content="ok"),
+        ]
+    )
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(llm, reg, gate, platform="darwin")
+    loop.run("go")
+
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    content = tool_msgs[0]["content"]
+    assert content.startswith("ERROR:")
+    assert "verify" in content.lower()  # model is told to check state, not blindly retry
+
+
+def test_failed_readonly_tool_gets_no_hint(tmp_path):
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "echo", {})]),
+            assistant_msg(content="ok"),
+        ]
+    )
+
+    def boom(args):
+        raise RuntimeError("nope")
+
+    registry = make_registry(boom)  # AUTO tier
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(llm, registry, gate, platform="darwin")
+    loop.run("go")
+
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    assert "verify" not in tool_msgs[0]["content"].lower()

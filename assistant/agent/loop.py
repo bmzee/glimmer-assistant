@@ -9,7 +9,7 @@ from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
 from assistant.security.quarantine import datamark
 from assistant.security.trust import SessionTrust
-from assistant.tools.registry import ToolRegistry
+from assistant.tools.registry import RiskTier, ToolRegistry
 
 
 class AgentLoop:
@@ -107,6 +107,11 @@ class AgentLoop:
             status = "ok"
         except Exception as e:  # tool bugs must not kill the loop; the model retries
             output = f"ERROR: {e}"
+            if tool.risk_tier >= RiskTier.UNDO:
+                output += (
+                    "\nThis action may have partially completed. Verify the current "
+                    "state with a read-only tool before retrying."
+                )
             status = "error"
         if self._log is not None:
             self._log.append(
