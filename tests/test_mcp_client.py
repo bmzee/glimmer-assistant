@@ -74,3 +74,62 @@ def test_tool_error_becomes_error_string():
 
     tools = make_mcp_tools([spec()], session_factory=lambda s: BoomSession())
     assert tools[0].func({"path": "/tmp/x"}).startswith("ERROR:")
+
+
+def test_malformed_descriptor_skips_only_that_tool():
+    """One bad descriptor (missing 'name') should not drop the valid one."""
+    class MixedSession(FakeSession):
+        def list_tools(self):
+            return [
+                {"description": "missing name field"},  # malformed
+                {
+                    "name": "read_file",
+                    "description": "read a file",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {"path": {"type": "string"}},
+                        "required": ["path"],
+                    },
+                },  # valid
+            ]
+
+    tools = make_mcp_tools([spec()], session_factory=lambda s: MixedSession())
+    # Should have exactly ONE tool (the valid one), not crash
+    assert len(tools) == 1
+    assert tools[0].name == "fs__read_file"
+
+
+def test_broken_server_does_not_drop_other_servers_tools():
+    """One dead server should not prevent other servers from contributing tools."""
+    def factory(spec_obj):
+        if spec_obj.name == "bad":
+            raise RuntimeError("bad server would not start")
+        return FakeSession()
+
+    tools = make_mcp_tools(
+        [spec(name="bad"), spec(name="good")],
+        session_factory=factory,
+    )
+    # Should contain the good server's tool, not crash
+    assert len(tools) == 1
+    assert tools[0].name == "good__read_file"
+
+
+def test_list_tools_failure_is_isolated():
+    """If list_tools() fails for one server, others should still work."""
+    class FailListSession(FakeSession):
+        def list_tools(self):
+            raise RuntimeError("list_tools failed")
+
+    def factory(spec_obj):
+        if spec_obj.name == "broken":
+            return FailListSession()
+        return FakeSession()
+
+    tools = make_mcp_tools(
+        [spec(name="broken"), spec(name="healthy")],
+        session_factory=factory,
+    )
+    # Should contain only the healthy server's tool
+    assert len(tools) == 1
+    assert tools[0].name == "healthy__read_file"

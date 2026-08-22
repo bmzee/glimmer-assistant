@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from assistant.tools.registry import RiskTier, Tool
 
@@ -35,12 +35,17 @@ def make_mcp_tools(specs, *, session_factory=None) -> list[Tool]:
         except Exception:
             continue  # a broken server must not break the assistant
         for descriptor in listed:
-            tools.append(_wrap(spec, session, descriptor))
+            try:
+                tools.append(_wrap(spec, session, descriptor))
+            except Exception:
+                continue  # a malformed descriptor must not drop other tools/servers
     return tools
 
 
 def _wrap(spec: MCPServerSpec, session, descriptor: dict) -> Tool:
-    remote_name = descriptor["name"]
+    remote_name = descriptor.get("name")
+    if not remote_name:
+        raise ValueError("descriptor missing or empty 'name' field")
 
     def call(args: dict) -> str:
         try:
