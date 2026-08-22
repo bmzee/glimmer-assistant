@@ -18,6 +18,29 @@ class FakeAdapter(PlatformAdapter):
         self.calls.append(("open_path", path))
         return f"opened {path}"
 
+    # The remaining PlatformAdapter methods are unused here but must exist:
+    # the ABC now covers the full spec SS7 surface, and a fake that lags the
+    # real interface is exactly how drift hides.
+    def quit_app(self, name: str) -> str:
+        self.calls.append(("quit_app", name))
+        return f"quit {name}"
+
+    def list_windows(self) -> str:
+        self.calls.append(("list_windows",))
+        return "no visible windows"
+
+    def focus_window(self, name: str) -> str:
+        self.calls.append(("focus_window", name))
+        return f"focused {name}"
+
+    def set_volume(self, level: int) -> str:
+        self.calls.append(("set_volume", level))
+        return f"volume set to {level}"
+
+    def screenshot(self, path: str) -> str:
+        self.calls.append(("screenshot", path))
+        return f"screenshot saved to {path}"
+
 
 def by_name(tools):
     return {t.name: t for t in tools}

@@ -8,7 +8,9 @@ from assistant.config import Config, load_config
 def test_defaults_without_file():
     cfg = load_config(None)
     assert cfg.llm_base_url == "http://localhost:11434/v1"
-    assert cfg.llm_model == "muse-glimmer:30b"
+    # Default selected by the A/B in docs/model-ab.md (both 10/10; Qwen chosen for
+    # tool discipline, not speed -- Glimmer is actually faster per token)
+    assert cfg.llm_model == "qwen3.8:27b"
     assert cfg.max_iterations == 15
     assert cfg.tool_result_max_chars == 16000
     assert cfg.allowed_roots == ["~"]

@@ -1,5 +1,8 @@
 # llm_base_url: http://localhost:11434/v1
-# llm_model: muse-glimmer:30b
+# llm_model: qwen3.8:27b        # default; see docs/model-ab.md for the A/B
+# llm_model: muse-glimmer:30b   # alternative: equally correct, faster per token,
+#                               # but chattier + calls tools it doesn't need, so
+#                               # ~3x more wall time per task. Not a speed deficit.
 # max_iterations: 15
 # tool_result_max_chars: 16000
 # allowed_roots: ["~"]

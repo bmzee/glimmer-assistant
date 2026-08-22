@@ -51,6 +51,13 @@ class _Browser:
         text = page.locator("body").aria_snapshot()
         return text or "(no accessible content)"
 
+    def fill(self, url: str, selector: str, value: str) -> str:
+        page = self._page()
+        if page.url.rstrip("/") != url.rstrip("/"):
+            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        page.fill(selector, value, timeout=15000)
+        return f"filled {selector}"
+
     def close(self) -> None:
         if self._context is not None:
             self._context.close()
@@ -80,6 +87,19 @@ def make_web_tools(browser=None) -> list[Tool]:
             return browser.snapshot(url)
         except Exception as e:
             return f"ERROR: {e}"
+
+    def fill_form_field(args: dict) -> str:
+        url = args["url"]
+        if not _valid_url(url):
+            return "ERROR: unsupported URL scheme (only http/https allowed)"
+        try:
+            browser.fill(url, args["selector"], args["value"])
+        except Exception as e:
+            return f"ERROR: {e}"
+        # Deliberately does not echo the value: it is frequently private, and
+        # repeating it here would copy it into the transcript and any later
+        # compaction summary for no benefit.
+        return f"filled {args['selector']}"
 
     def search_web(args: dict) -> str:
         query = args["query"]
@@ -114,6 +134,31 @@ def make_web_tools(browser=None) -> list[Tool]:
             platforms=("darwin", "win32"),
             func=read_page,
             untrusted=True,
+            outbound=True,
+        ),
+        Tool(
+            name="fill_form_field",
+            description=(
+                "Type a value into a form field on a web page, identified by a "
+                "CSS selector. Does not submit the form."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string"},
+                    "selector": {"type": "string"},
+                    "value": {"type": "string"},
+                },
+                "required": ["url", "selector", "value"],
+            },
+            # CONFIRM: typing into a page is one step from submitting it.
+            risk_tier=RiskTier.CONFIRM,
+            platforms=("darwin", "win32"),
+            func=fill_form_field,
+            # outbound: this puts data INTO a remote page, which is
+            # exfiltration. Without it, a session that has read an untrusted
+            # page could be talked into typing private data into an attacker's
+            # form with no elevated confirmation.
             outbound=True,
         ),
         Tool(

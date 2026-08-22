@@ -3,12 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 
+from assistant.agent.compaction import compact, should_compact
 from assistant.agent.prompts import SYSTEM_PROMPT
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
 from assistant.security.quarantine import datamark
 from assistant.security.trust import SessionTrust
-from assistant.tools.registry import ToolRegistry
+from assistant.tools.registry import RiskTier, ToolRegistry
+# Pure text handling (imports only `re`); no voice dependency is pulled in.
+from assistant.voice.streaming import SentenceAccumulator, split_sentences
 
 
 class AgentLoop:
@@ -22,6 +25,9 @@ class AgentLoop:
         tool_result_max_chars: int = 16000,
         log: ActionLog | None = None,
         trust: SessionTrust | None = None,
+        context_max_tokens: int = 131072,
+        compact_threshold: float = 0.65,
+        min_sentence_chars: int = 0,
     ):
         self._llm = llm
         self._registry = registry
@@ -31,8 +37,17 @@ class AgentLoop:
         self._max_chars = tool_result_max_chars
         self._log = log
         self._trust = trust
+        self._context_max_tokens = context_max_tokens
+        self._compact_threshold = compact_threshold
+        self._min_sentence_chars = min_sentence_chars
 
-    def run(self, user_text: str) -> str:
+    def run(self, user_text: str, on_sentence=None) -> str:
+        """Run a turn.
+
+        With ``on_sentence`` the loop streams and hands over each sentence the
+        moment it completes, so speech starts before generation finishes. Without
+        it the blocking API is used and behaviour is unchanged.
+        """
         messages: list[dict] = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text},
@@ -40,7 +55,15 @@ class AgentLoop:
         schemas = self._registry.schemas(self._platform)
 
         for _ in range(self._max_iterations):
-            msg = self._llm.chat(messages, schemas)
+            if should_compact(messages, self._context_max_tokens, self._compact_threshold):
+                # Escalate keep_recent only as far as needed to drop below threshold
+                for keep in (6, 4, 2):
+                    candidate = compact(messages, keep_recent=keep)
+                    messages = candidate
+                    if not should_compact(candidate, self._context_max_tokens, self._compact_threshold):
+                        break
+                self._on_compact()
+            msg = self._chat(messages, schemas, on_sentence)
             if not getattr(msg, "tool_calls", None):
                 return msg.content or ""
 
@@ -70,7 +93,27 @@ class AgentLoop:
                     }
                 )
 
-        return "I hit my step limit before finishing; here is where I stopped."
+        limit = "I hit my step limit before finishing; here is where I stopped."
+        if on_sentence is not None:
+            for sentence in split_sentences(limit):
+                on_sentence(sentence)
+        return limit
+
+    def _chat(self, messages: list[dict], schemas: list[dict], on_sentence):
+        if on_sentence is None:
+            return self._llm.chat(messages, schemas)
+        accumulator = SentenceAccumulator(min_chars=self._min_sentence_chars)
+
+        def on_delta(delta: str) -> None:
+            for sentence in accumulator.feed(delta):
+                on_sentence(sentence)
+
+        msg = self._llm.chat_stream(messages, schemas, on_delta=on_delta)
+        # A turn ending in a tool call may carry a spoken preamble; flush it
+        # so the user hears the whole thing, not just its complete sentences.
+        for sentence in accumulator.flush():
+            on_sentence(sentence)
+        return msg
 
     def _execute(self, name: str, raw_arguments: str) -> str:
         tool = self._registry.get(name)
@@ -94,6 +137,11 @@ class AgentLoop:
             status = "ok"
         except Exception as e:  # tool bugs must not kill the loop; the model retries
             output = f"ERROR: {e}"
+            if tool.risk_tier >= RiskTier.UNDO:
+                output += (
+                    "\nThis action may have partially completed. Verify the current "
+                    "state with a read-only tool before retrying."
+                )
             status = "error"
         if self._log is not None:
             self._log.append(
@@ -110,3 +158,7 @@ class AgentLoop:
         if len(s) <= self._max_chars:
             return s
         return s[: self._max_chars] + "\n[truncated]"
+
+    def _on_compact(self) -> None:
+        if self._log is not None:
+            self._log.append({"event": "context_compacted"})

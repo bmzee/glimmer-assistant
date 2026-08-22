@@ -9,9 +9,19 @@ import yaml
 @dataclass
 class Config:
     llm_base_url: str = "http://localhost:11434/v1"
-    llm_model: str = "muse-glimmer:30b"
+    # Default chosen by the A/B in docs/model-ab.md: both models scored 10/10,
+    # but Qwen is ~3x faster and does not wander through irrelevant tools when
+    # no tool fits. Set to "muse-glimmer:30b" to switch back.
+    llm_model: str = "qwen3.8:27b"
     llm_api_key: str = "ollama"  # Ollama ignores the value but the SDK requires one
     llm_timeout_seconds: float = 120.0
+    # Reasoning models emit hidden thinking tokens before their first visible
+    # token. "none" suppresses that (7.5x faster to first token) but MEASURED
+    # WORSE: eval drops 10/10 -> 9/10 (fails on tool use) and a literal
+    # "</think>" leaks into visible text ~1 turn in 10, which the voice path
+    # would speak aloud. Do not enable for voice. Empty means the key is
+    # omitted entirely, so endpoints that reject it keep working. docs/latency.md
+    llm_reasoning_effort: str = ""
     max_iterations: int = 15
     tool_result_max_chars: int = 16000
     allowed_roots: list[str] = field(default_factory=lambda: ["~"])
@@ -25,6 +35,8 @@ class Config:
     enable_m365: bool = False
     m365_client_id: str = ""
     mcp_servers: list = field(default_factory=list)
+    context_max_tokens: int = 131072
+    compact_threshold: float = 0.65
 
 
 def load_config(path: str | Path | None = None) -> Config:

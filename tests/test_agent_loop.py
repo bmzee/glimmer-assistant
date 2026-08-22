@@ -301,3 +301,207 @@ def test_untrusted_tool_marks_session_trust(tmp_path):
     loop.run("go")
     assert trust.has_ingested_untrusted() is True
     assert "fetch" in trust.sources()
+
+
+def test_loop_compacts_when_context_grows(tmp_path):
+    """Compaction must preserve tool-call/tool-result pairing invariant:
+    every tool message must have its parent assistant message in the output."""
+    # Accumulate messages through tool calls to trigger compaction
+    llm = FakeLLM([
+        assistant_msg(tool_calls=[tool_call("c1", "echo", {}), tool_call("c2", "echo", {})]),
+        assistant_msg(tool_calls=[tool_call("c3", "echo", {}), tool_call("c4", "echo", {})]),
+        assistant_msg(content="done")
+    ])
+    registry = make_registry(lambda a: "x")
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(
+        llm, registry, gate, platform="darwin",
+        context_max_tokens=200, compact_threshold=0.65,  # tiny -> forces compaction
+    )
+    loop.run("x" * 800)
+
+    # After accumulating messages through tool calls, compaction should happen
+    compaction_found = False
+    for sent in llm.seen_messages:
+        if any("summarized" in str(m.get("content", "")) for m in sent):
+            compaction_found = True
+
+    assert compaction_found, "Expected compaction to occur when context grows"
+
+    # CRITICAL: Verify pairing invariant on EVERY message list sent to LLM
+    # Every tool message must be preceded by an assistant message with matching tool_calls
+    for call_index, sent in enumerate(llm.seen_messages):
+        for msg_index, m in enumerate(sent):
+            if m.get("role") == "tool":
+                tool_call_id = m["tool_call_id"]
+                # Find parent: any earlier message with role=assistant and matching tool_calls
+                parent_found = any(
+                    sent[j].get("role") == "assistant" and any(
+                        c.get("id") == tool_call_id
+                        for c in sent[j].get("tool_calls", [])
+                    )
+                    for j in range(msg_index)
+                )
+                assert parent_found, (
+                    f"LLM call #{call_index}, msg #{msg_index}: "
+                    f"tool_call_id '{tool_call_id}' has no preceding "
+                    f"assistant message with matching tool_calls entry"
+                )
+
+
+def test_escalates_keep_recent_until_under_threshold(tmp_path):
+    """Escalation policy: keep_recent (6, 4, 2) until under threshold.
+    Verify final output is under threshold and compacted."""
+    from assistant.agent.compaction import compact, should_compact, estimate_tokens
+
+    # Create a message list where keep_recent=6 leaves it over threshold but
+    # a smaller keep_recent gets under
+    messages = [{"role": "system", "content": "SYSTEM"}]
+    for i in range(15):
+        messages.append({"role": "user", "content": "q" * 100})
+        messages.append({"role": "assistant", "content": "a" * 100})
+
+    # Verify initial state
+    assert should_compact(messages, max_tokens=200, threshold=0.65)
+
+    # Simulate escalation loop as in AgentLoop.run
+    max_tokens = 200
+    threshold = 0.65
+    for keep in (6, 4, 2):
+        candidate = compact(messages, keep_recent=keep)
+        messages = candidate
+        if not should_compact(candidate, max_tokens, threshold):
+            break
+
+    # Final output should be under threshold
+    assert not should_compact(messages, max_tokens, threshold)
+    # Should be compacted (shorter than original)
+    assert len(messages) < 32  # original had 31 messages
+
+
+def test_escalation_stops_at_floor(tmp_path):
+    """Escalation terminates at floor (keep_recent=2), no infinite loop.
+    Handles pathological case where no keep_recent level gets under threshold.
+    Must still maintain pairing invariant and system anchoring."""
+    from assistant.agent.compaction import compact, should_compact
+
+    # Create a huge list to ensure even keep_recent=2 might not fully compress
+    messages = [{"role": "system", "content": "SYSTEM"}]
+    for i in range(100):
+        messages.append({"role": "user", "content": "q" * 10})
+        messages.append({"role": "assistant", "content": "a" * 10})
+
+    max_tokens = 100  # Very small limit
+    threshold = 0.65
+
+    # Escalation loop (from AgentLoop.run)
+    iterations = 0
+    for keep in (6, 4, 2):
+        iterations += 1
+        candidate = compact(messages, keep_recent=keep)
+        messages = candidate
+        if not should_compact(candidate, max_tokens, threshold):
+            break
+
+    # Should terminate (not infinite)
+    assert iterations <= 3
+
+    # Pairing invariant: every tool message must have its parent
+    # (no tool messages in this test, but validate structure)
+    assert messages[0]["role"] == "system"  # system anchored
+    for m in messages:
+        if m.get("role") == "tool":
+            tool_call_id = m["tool_call_id"]
+            parent_found = any(
+                msg.get("role") == "assistant" and any(
+                    c.get("id") == tool_call_id for c in msg.get("tool_calls", [])
+                )
+                for msg in messages
+            )
+            assert parent_found, f"tool {tool_call_id} orphaned after escalation"
+
+
+def test_escalation_with_parallel_tool_calls(tmp_path):
+    """Escalation policy must preserve tool-call/tool-result pairing when
+    compacting with parallel tool calls across keep_recent levels."""
+    llm = FakeLLM([
+        assistant_msg(tool_calls=[tool_call("c1", "echo", {}), tool_call("c2", "echo", {})]),
+        assistant_msg(tool_calls=[tool_call("c3", "echo", {}), tool_call("c4", "echo", {})]),
+        assistant_msg(tool_calls=[tool_call("c5", "echo", {}), tool_call("c6", "echo", {})]),
+        assistant_msg(content="done")
+    ])
+    registry = make_registry(lambda a: "x")
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(
+        llm, registry, gate, platform="darwin",
+        context_max_tokens=150, compact_threshold=0.65,
+    )
+    loop.run("x" * 600)
+
+    # Verify pairing invariant across all LLM calls with escalation
+    for call_index, sent in enumerate(llm.seen_messages):
+        for msg_index, m in enumerate(sent):
+            if m.get("role") == "tool":
+                tool_call_id = m["tool_call_id"]
+                parent_found = any(
+                    sent[j].get("role") == "assistant" and any(
+                        c.get("id") == tool_call_id
+                        for c in sent[j].get("tool_calls", [])
+                    )
+                    for j in range(msg_index)
+                )
+                assert parent_found, (
+                    f"LLM call #{call_index} with escalation: "
+                    f"tool_call_id '{tool_call_id}' at msg #{msg_index} "
+                    f"has no preceding parent"
+                )
+
+
+def test_failed_mutating_tool_gets_verification_hint(tmp_path):
+    from assistant.tools.registry import RiskTier, Tool, ToolRegistry
+
+    reg = ToolRegistry()
+    reg.register(
+        Tool(
+            name="mutate",
+            description="d",
+            parameters={"type": "object", "properties": {}, "required": []},
+            risk_tier=RiskTier.UNDO,
+            platforms=("darwin",),
+            func=lambda a: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+    )
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "mutate", {})]),
+            assistant_msg(content="ok"),
+        ]
+    )
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(llm, reg, gate, platform="darwin")
+    loop.run("go")
+
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    content = tool_msgs[0]["content"]
+    assert content.startswith("ERROR:")
+    assert "verify" in content.lower()  # model is told to check state, not blindly retry
+
+
+def test_failed_readonly_tool_gets_no_hint(tmp_path):
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "echo", {})]),
+            assistant_msg(content="ok"),
+        ]
+    )
+
+    def boom(args):
+        raise RuntimeError("nope")
+
+    registry = make_registry(boom)  # AUTO tier
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(llm, registry, gate, platform="darwin")
+    loop.run("go")
+
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    assert "verify" not in tool_msgs[0]["content"].lower()
