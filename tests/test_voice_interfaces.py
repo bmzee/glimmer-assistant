@@ -1,8 +1,6 @@
 import importlib
 import sys
 
-import pytest
-
 from assistant.voice.interfaces import PushToTalk, SpeechToText, TextToSpeech
 
 

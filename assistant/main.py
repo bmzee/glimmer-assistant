@@ -90,6 +90,7 @@ def main() -> None:
     cfg = load_config(config_path if config_path.exists() else None)
 
     if "--voice" in sys.argv:
+        print("loading voice models...")
         session = build_voice_session(cfg, sys.platform)
         print("glimmer-assistant voice mode. Hold the hotkey to talk. Ctrl-C to exit.")
         session.run_forever()
