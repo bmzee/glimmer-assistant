@@ -48,6 +48,15 @@ def cli_confirm(request) -> bool:
     return input(f"ALLOW? {request.preview} [y/N] ").strip().lower() == "y"
 
 
+def _voice_event_printer(name, payload):
+    if name == "transcribed":
+        print(f"you said: {payload}")
+    elif name == "answered":
+        print(f"assistant: {payload}")
+    elif name == "error":
+        print(f"[error] {payload}")
+
+
 def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
     from assistant.voice.session import VoiceSession
 
@@ -64,7 +73,14 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
         from assistant.voice.audio import HotkeyPushToTalk
 
         ptt = HotkeyPushToTalk(cfg.voice_hotkey, min_seconds=cfg.voice_min_utterance_seconds)
-    return VoiceSession(ptt, stt, loop, tts, min_utterance_seconds=cfg.voice_min_utterance_seconds)
+    return VoiceSession(
+        ptt,
+        stt,
+        loop,
+        tts,
+        min_utterance_seconds=cfg.voice_min_utterance_seconds,
+        on_event=_voice_event_printer,
+    )
 
 
 def main() -> None:

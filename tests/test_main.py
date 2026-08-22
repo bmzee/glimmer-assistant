@@ -38,3 +38,16 @@ def test_build_voice_session_wires_components(tmp_path):
     )
     # smoke: one cycle with a None utterance does nothing and does not raise
     session.run_once()
+
+
+def test_voice_event_printer_formats(capsys):
+    from assistant.main import _voice_event_printer
+
+    _voice_event_printer("transcribed", "hi")
+    _voice_event_printer("answered", "yo")
+    _voice_event_printer("error", RuntimeError("x"))
+
+    out = capsys.readouterr().out
+    assert "you said: hi" in out
+    assert "assistant: yo" in out
+    assert "[error]" in out
