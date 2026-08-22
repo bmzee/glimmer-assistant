@@ -7,25 +7,38 @@
 
 ## Result
 
+The gate measures **PTT release → first TTS audio**. With sentence-level
+streaming (spec §5) the answer is spoken as it is written, so the quantity that
+counts is time-to-*first-sentence*, not time-to-complete-answer.
+
 | Stage | Median | Share |
 |---|---:|---:|
-| STT (Parakeet-TDT, MLX) | 0.12s | 3% |
-| **Agent loop (LLM)** | **2.95s** | **82%** |
-| TTS first audio (Kokoro-82M) | 0.51s | 14% |
-| **Total** | **3.58s** | |
+| STT (Parakeet-TDT, MLX) | 0.13s | 5% |
+| **TTFT — model's first content token** | **~1.9s** | **73%** |
+| first delta → first complete sentence | 0.24s | 9% |
+| TTS synthesis of that sentence | 0.31s | 12% |
+| **Total to first audio** | **2.59s** | |
 | **Gate** | **≤ 2.50s** | |
-| **Verdict** | ❌ **MISS by 1.08s** | |
+| **Verdict** | ❌ **miss by 0.09s** | |
+
+Measured on AC (`powermode 0`), 10 repetitions, `qwen3.8:27b`. Full answer
+completes at ~2.90s; everything after the first sentence overlaps with speech
+the user is already hearing and does not count against the gate.
+
+Spoken chunking is clean in practice — `'Hello!'` / `'How can I help you
+today?'` — with no broken fragments.
 
 ## How we got here
 
 The first measurement of this gate read **10.87s**. Two defects were found and
 removed, neither of which was a property of the models:
 
-| | STT | Agent | TTS | Total | vs gate |
+| | STT | Agent | TTS | To first audio | vs gate |
 |---|---:|---:|---:|---:|---:|
 | Initial measurement | 0.16s | 8.38s | 2.33s | **10.87s** | miss by 8.37s |
 | …on AC power (`powermode 0`) | 0.11s | 2.85s | 2.12s | **5.08s** | miss by 2.58s |
 | …with the TTS phonemizer fix | 0.12s | 2.95s | 0.51s | **3.58s** | miss by 1.08s |
+| …with sentence-level streaming | 0.13s | — | — | **2.59s** | miss by 0.09s |
 
 ### Defect 1 — the host was throttled (−5.79s)
 
@@ -68,43 +81,66 @@ If the fast path fails for any reason it falls back to kokoro's own
 phonemization, so a broken espeak degrades to slow-but-working rather than
 crashing the voice session.
 
-## What remains
+## What remains: reasoning tokens, not speed
 
-The agent step is now **82% of the budget** and exceeds the entire gate on its
-own. No further STT/TTS tuning can close a 1.08s deficit against a 2.95s LLM
-step. The remaining lever is the one the spec already calls for and we have not
-built:
+At 0.09s short, the obvious question is where the remaining 2.59s sits. It is
+**not** prompt evaluation — the prompt is ~200 tokens and Ollama reports
+**0.23s / 31 tokens** for it. It is **hidden reasoning tokens**.
 
-**Sentence-level TTS streaming (spec §5, unimplemented).** Today the pipeline
-waits for the complete answer before synthesizing anything. Streaming the first
-sentence to TTS as soon as the model emits it changes the measured quantity
-from *total answer time* to *time-to-first-sentence*:
+`qwen3.8:27b` is a reasoning model. Asked directly (bypassing the OpenAI shim),
+it emits 70–80 characters of thinking before its first spoken word — even for
+"say hello in one short sentence":
 
-```
-0.12s  STT
-+ ~1.1s  first sentence (~15-20 tokens at the measured 13-20 tok/s)
-+ 0.35s  TTS first audio
-≈ 1.6s   -> PASSES with ~0.9s margin
-```
+| | first content token | thinking emitted | tokens generated |
+|---|---:|---:|---:|
+| default | **1.94s** | 81 chars | 29 |
+| `think=False` | **0.23s** | 0 | 3 |
 
-This is a projection, not a measurement — it assumes a first sentence of
-15–20 tokens and must be confirmed once implemented.
+**8.4×.** Disabling thinking would clear the gate outright — projected ~0.91s
+against a 2.5s budget.
 
-**The gate is therefore recorded as FAILING but achievable.** It is an unmet
-acceptance criterion with a known, scoped fix — not evidence that the design
-target is wrong.
+It is deliberately **not** applied. Thinking is what makes the model good at
+choosing tools and sequencing multi-step work, which is the very reason it was
+chosen over Glimmer (`docs/model-ab.md`), and the 10-task eval has not been
+re-run with `think=False` to measure the cost. Turning it off to win a latency
+number, without checking what it does to the 10/10 task score, would be trading
+an unmeasured quality regression for 1.7s.
+
+The honest options, in order of preference:
+
+1. **Re-run the eval suite with `think=False`.** If the task score holds, take
+   it — the gate passes with ~1.6s of margin and nothing is lost.
+2. **Disable thinking only for turns with no tool calls.** Keeps reasoning
+   where it earns its cost; the §9 gate specifically measures a no-tool answer.
+3. **Accept 2.59s.** It is 0.09s over a round-number target, and the answer is
+   already streaming so the user hears speech begin promptly.
+
+The streaming work itself is done and is what took the gate from 10.87s to
+2.59s. What is left is a model-configuration decision with a real tradeoff, not
+an engineering gap.
+
+For the record, our streaming path does **not** speak the reasoning: Ollama
+reports it on a separate channel and the OpenAI shim keeps it out of `content`,
+so only the answer reaches TTS. Verified in the measured runs above.
 
 ## Method and caveats
 
-`latency.py` exercises the real pipeline — actual Parakeet STT, actual agent
-loop against Ollama, actual Kokoro TTS — not mocks. Five repetitions, medians
-reported. Two deliberate deviations:
+`latency_stream.py` exercises the real pipeline — actual Parakeet STT, actual
+agent loop streaming from Ollama, actual Kokoro TTS — not mocks. Ten
+repetitions, medians reported. (An earlier `latency.py` measured the
+non-streaming path and produced the 10.87s / 5.08s / 3.58s rows above.)
+
+Ten repetitions matters here: a five-rep run of the same script gave a median
+of 2.17s, which would have read as a PASS. The wider sample moved it to 2.59s.
+With a margin this thin, do not quote a five-rep number.
+
+Two deliberate deviations:
 
 1. **No live microphone.** The utterance ("say hello in one short sentence") is
    synthesized once via Kokoro and fed to STT as a buffer, because the mic is
    TCC-gated and unavailable headless. This *understates* real latency slightly:
    it omits PTT key-release handling and the tail of audio capture. Both are
-   small next to the 2.95s LLM cost.
+   small next to the ~1.9s spent waiting on the model's first content token.
 2. **Warm-up excluded.** The first iteration loads both models and is discarded,
    which is correct for a p50 steady-state gate — but a cold first utterance
    after launch is materially worse, and now also pays the one-time 2.3s espeak
@@ -115,6 +151,7 @@ The "no-tool answer" condition is enforced by disabling the optional tool groups
 round-trip. This is the easiest case; any answer requiring a tool call will be
 slower.
 
-Measured with `qwen3.8:27b`. Glimmer generates ~40% faster per token
-(`docs/model-ab.md`), so the agent step would likely be lower with it — but its
-tool-wandering makes it worse on tasks that do use tools.
+Measured with `qwen3.8:27b`. Glimmer generates ~35% faster per token
+(`docs/model-ab.md`), so its time-to-first-sentence would likely be lower — but
+its tool-wandering makes it worse on tasks that do use tools, and it has not
+been measured against this gate.
