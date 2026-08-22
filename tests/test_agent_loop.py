@@ -44,7 +44,7 @@ def make_registry(func, tier=RiskTier.AUTO):
 
 
 def make_loop(tmp_path, llm, registry, confirm=True, **kwargs):
-    gate = PermissionGate(ActionLog(tmp_path / "a.jsonl"), confirmer=lambda d: confirm)
+    gate = PermissionGate(ActionLog(tmp_path / "a.jsonl"), confirmer=lambda req: confirm)
     return AgentLoop(llm, registry, gate, platform="darwin", **kwargs)
 
 

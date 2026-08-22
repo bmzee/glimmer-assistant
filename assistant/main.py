@@ -6,6 +6,7 @@ from typing import Callable
 from assistant.agent.loop import AgentLoop
 from assistant.config import Config, load_config
 from assistant.llm.client import LLMClient
+from assistant.security.confirm import ConfirmRequest
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
 from assistant.tools.apps import make_app_tools
@@ -13,7 +14,7 @@ from assistant.tools.files import make_files_tools
 from assistant.tools.registry import ToolRegistry
 
 
-def build_loop(cfg: Config, confirmer: Callable[[str], bool], platform: str) -> AgentLoop:
+def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platform: str) -> AgentLoop:
     registry = ToolRegistry()
     roots = [Path(r) for r in cfg.allowed_roots]
     for tool in make_files_tools(roots):
