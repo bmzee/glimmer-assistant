@@ -1,3 +1,4 @@
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -211,3 +212,25 @@ def test_untrusted_tool_result_is_datamarked(tmp_path):
     tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
     assert "untrusted" in tool_msgs[0]["content"].lower()
     assert "secret instructions" in tool_msgs[0]["content"]
+
+
+def test_post_execution_result_is_logged(tmp_path):
+    log_path = tmp_path / "audit.jsonl"
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "echo", {})]),
+            assistant_msg(content="done"),
+        ]
+    )
+    registry = make_registry(lambda a: "the-result")
+    gate = PermissionGate(ActionLog(tmp_path / "gate.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(llm, registry, gate, platform="darwin", log=ActionLog(log_path))
+    loop.run("go")
+
+    records = [json.loads(l) for l in log_path.read_text().splitlines()]
+    result_records = [r for r in records if r.get("event") == "tool_result"]
+    assert len(result_records) == 1
+    rec = result_records[0]
+    assert rec["tool"] == "echo"
+    assert rec["status"] == "ok"
+    assert rec["result_sha256"] == hashlib.sha256(b"the-result").hexdigest()

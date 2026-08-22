@@ -26,7 +26,8 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         for tool in make_app_tools(MacAdapter(), roots):
             registry.register(tool)
         registry.register(make_shell_tool(roots))
-    gate = PermissionGate(ActionLog(cfg.log_path), confirmer)
+    log = ActionLog(cfg.log_path)
+    gate = PermissionGate(log, confirmer)
     return AgentLoop(
         LLMClient(cfg),
         registry,
@@ -34,6 +35,7 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         platform,
         max_iterations=cfg.max_iterations,
         tool_result_max_chars=cfg.tool_result_max_chars,
+        log=log,
     )
 
 

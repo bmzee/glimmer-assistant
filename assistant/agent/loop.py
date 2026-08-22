@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 
 from assistant.agent.prompts import SYSTEM_PROMPT
 from assistant.security.gate import PermissionGate
+from assistant.security.log import ActionLog
 from assistant.security.quarantine import datamark
 from assistant.tools.registry import ToolRegistry
 
@@ -17,6 +19,7 @@ class AgentLoop:
         platform: str,
         max_iterations: int = 15,
         tool_result_max_chars: int = 16000,
+        log: ActionLog | None = None,
     ):
         self._llm = llm
         self._registry = registry
@@ -24,6 +27,7 @@ class AgentLoop:
         self._platform = platform
         self._max_iterations = max_iterations
         self._max_chars = tool_result_max_chars
+        self._log = log
 
     def run(self, user_text: str) -> str:
         messages: list[dict] = [
@@ -79,9 +83,21 @@ class AgentLoop:
             result = tool.func(args)
             if tool.untrusted:
                 result = datamark(result, tool.name)
-            return self._truncate(result)
+            output = self._truncate(result)
+            status = "ok"
         except Exception as e:  # tool bugs must not kill the loop; the model retries
-            return f"ERROR: {e}"
+            output = f"ERROR: {e}"
+            status = "error"
+        if self._log is not None:
+            self._log.append(
+                {
+                    "event": "tool_result",
+                    "tool": name,
+                    "status": status,
+                    "result_sha256": hashlib.sha256(output.encode()).hexdigest(),
+                }
+            )
+        return output
 
     def _truncate(self, s: str) -> str:
         if len(s) <= self._max_chars:
