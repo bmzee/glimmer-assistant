@@ -9,7 +9,10 @@ import yaml
 @dataclass
 class Config:
     llm_base_url: str = "http://localhost:11434/v1"
-    llm_model: str = "muse-glimmer:30b"
+    # Default chosen by the A/B in docs/model-ab.md: both models scored 10/10,
+    # but Qwen is ~3x faster and does not wander through irrelevant tools when
+    # no tool fits. Set to "muse-glimmer:30b" to switch back.
+    llm_model: str = "qwen3.8:27b"
     llm_api_key: str = "ollama"  # Ollama ignores the value but the SDK requires one
     llm_timeout_seconds: float = 120.0
     max_iterations: int = 15
