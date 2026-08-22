@@ -36,6 +36,16 @@ def test_wrap_raises_when_unavailable(tmp_path: Path, monkeypatch):
         wrap_command(["/bin/echo", "hi"], [tmp_path])
 
 
+def test_build_profile_rejects_quote_in_root():
+    with pytest.raises(ValueError, match="unsafe character in sandbox writable root"):
+        build_profile([Path('/tmp/ev"il')])
+
+
+def test_build_profile_rejects_backslash_in_root():
+    with pytest.raises(ValueError, match="unsafe character in sandbox writable root"):
+        build_profile([Path('/tmp/evil\\path')])
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="sandbox-exec is macOS-only")
 def test_real_sandbox_confines_writes(tmp_path: Path):
     allowed = tmp_path / "allowed"

@@ -25,6 +25,10 @@ def build_profile(writable_roots: list[Path]) -> str:
     ]
     for root in writable_roots:
         resolved = Path(root).expanduser().resolve()
+        resolved_str = str(resolved)
+        # Reject paths with unsafe characters that could break SBPL string literals
+        if '"' in resolved_str or '\\' in resolved_str or '\n' in resolved_str:
+            raise ValueError(f"unsafe character in sandbox writable root: {resolved!r}")
         lines.append(f'(allow file-write* (subpath "{resolved}"))')
     return "\n".join(lines) + "\n"
 
