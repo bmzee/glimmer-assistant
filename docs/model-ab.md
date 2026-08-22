@@ -13,7 +13,9 @@ This closes the **contender clause** in `docs/spec.md` §2, which required evalu
 
 Both models answered every task correctly (10/10 each). They are separated by **tool discipline and output quality**: Glimmer reaches the same answers while emitting far more tokens and calling tools it does not need.
 
-> ⚠️ **All wall-clock timings in this document are contaminated.** They were recorded on battery with macOS **Low Power Mode active** (`pmset -g`: `Battery Power: powermode 1`) under load average ~21. Absolute numbers are a throttled floor, not the deployment target, and must be re-measured on AC power. The *relative behavioural* findings (tool discipline, structured-output quality, injection resistance) are unaffected by throttling and stand as written.
+> ⚠️ **The per-task timings in the Results table below are contaminated.** They were recorded on battery with macOS **Low Power Mode active** (`pmset -g`: `Battery Power: powermode 1`) under load average ~21, and the suite is slow enough that it also ran at the sustained-throttle floor. Treat them as a throttled floor and read the *ratios*, not the absolute seconds; the whole suite needs re-running on AC.
+>
+> The throughput figures in [Correction](#correction-glimmer-is-not-the-slower-model) **were** re-measured on AC (`powermode 0`, GPU rested) and are clean. The behavioural findings — tool discipline, structured-output quality, injection resistance — are unaffected by throttling and stand as written.
 
 ## Results
 
@@ -34,14 +36,25 @@ Both models answered every task correctly (10/10 each). They are separated by **
 
 ## Correction: Glimmer is not the slower model
 
-An earlier revision of this document claimed Qwen was "~3× faster." **That misattributed the cause.** End-to-end task time conflates two independent things: how fast a model emits tokens, and how many tokens plus round-trips it needs. A controlled benchmark isolating the first — identical prompt, no tools, both models warm, load time excluded via Ollama's own `eval_count`/`eval_duration` fields — shows the opposite:
+An earlier revision of this document claimed Qwen was "~3× faster." **That misattributed the cause.** End-to-end task time conflates two independent things: how fast a model emits tokens, and how many tokens plus round-trips it needs. A controlled benchmark isolating the first — identical prompt, no tools, load excluded via Ollama's own `eval_count`/`eval_duration`, **on AC power with the GPU rested 120s beforehand** — shows the opposite:
 
-| Model | Run 1 | Run 2 |
-|---|---:|---:|
-| `muse-glimmer:30b` | 6.2 tok/s | 5.8 tok/s |
-| `qwen3.8:27b` | 5.2 tok/s | 3.7 tok/s |
+| run | `muse-glimmer:30b` | `qwen3.8:27b` |
+|---:|---:|---:|
+| 1 | **20.5** tok/s | 13.0 tok/s |
+| 2 | **20.3** | 14.8 |
+| 3 | **18.7** | 13.3 |
+| 4 | **16.8** | 13.3 |
+| 5 | **16.1** | 12.3 |
+| 6 | **13.2** | 11.0 |
+| median | **~17.8** | ~13.2 |
 
-**Glimmer generates faster per token in every run measured.** The ~3× wall-clock gap is entirely explained by volume: Glimmer emits ~36% more tokens per answer *and* takes many more agent round-trips (up to 5 unnecessary tool calls where Qwen takes 0). It is chatty and exploratory, not slow.
+**Glimmer generates faster at every single position — ~35% on median.** The ~3× wall-clock gap is entirely explained by volume: Glimmer emits ~36% more tokens per answer *and* takes many more agent round-trips (up to 5 unnecessary tool calls where Qwen takes 0). It is chatty and exploratory, not slow.
+
+### Two measurement traps, recorded so they are not repeated
+
+**Sustained-load throttling.** Both models decay under back-to-back generation — Glimmer 20.5 → 13.2 tok/s over 138s (1.55×), Qwen 13.0 → 11.0 (1.19×). Prolonged hammering drives both to ~6 tok/s. `pmset -g therm` reports nothing throughout; it is a legacy Intel interface and stays silent on Apple Silicon. **Quote burst and sustained figures separately** — real voice turns are bursty (a few seconds of generation, then idle while the user listens and speaks), so the burst number is the representative one for interactive use, while a back-to-back eval suite runs at the sustained floor.
+
+**Ordering artifacts.** In a back-to-back script the third model measured read 2.2 tok/s; benchmarked in isolation immediately after, the same model read 6.0. Benchmark one model per process, evicting others first.
 
 The Qwen recommendation survives this correction, because the deciding factors below were never about generation speed. But the reasoning had to be rebuilt, and the "faster model" framing was wrong.
 
@@ -49,9 +62,9 @@ The Qwen recommendation survives this correction, because the deciding factors b
 
 `docs/spec.md` §2 specifies the Ollama **MLX engine with the DFlash speculative-decoding drafter**. Both models here were pulled as plain GGUF tags. `ollama ps` confirms 100% GPU placement, so this is a build issue, not a placement issue.
 
-Pulling `muse-glimmer:30b-mlx` and re-running gave **6.2 vs 5.8 tok/s** — no measurable gain, which is expected: that tag carries MLX but *not* DFlash. The spec-aligned Apple Silicon build is `muse-glimmer:30b-mlx-bf16-dflash`, which remains **untested**. Note the tradeoff before assuming it wins: bf16 at 30B is ~60 GB versus ~18 GB for q4, and generation here is memory-bandwidth-bound, so DFlash's ~1.7× may not cover a 3.3× increase in bytes moved per token.
+Pulling `muse-glimmer:30b-mlx` gave **22.7 vs 20.0 tok/s** against the plain build in the same burst window — suggestive but a single run, inside the run-to-run spread seen above, so treat it as **unconfirmed**. That tag carries MLX but *not* DFlash. The spec-aligned Apple Silicon build is `muse-glimmer:30b-mlx-bf16-dflash`, which remains **untested**. Note the tradeoff before assuming it wins: bf16 at 30B is ~60 GB versus ~18 GB for q4, and generation here is memory-bandwidth-bound, so DFlash's ~1.7× may not cover a 3.3× increase in bytes moved per token.
 
-**Open question, deliberately not answered here:** absolute throughput is unresolved until the suite is re-run on AC power with Low Power Mode off. ~6 tok/s for an 18 GB model on an M3 Max is well below what the hardware should deliver, and Low Power Mode is the most likely explanation.
+**Resolved:** the earlier ~6 tok/s figures were a throttling artifact. On AC with `powermode 0` and a rested GPU, Glimmer reaches **20.5 tok/s** — in line with what an 18 GB model on an M3 Max should deliver, and ~3.4× the throttled reading. The hardware was never the problem and neither was the build.
 
 ## The deciding factor: tool discipline
 
@@ -99,7 +112,7 @@ Set `llm_model: qwen3.8:27b`. Rationale:
 4. **Better structured-output quality** at equal schema compliance.
 5. Equal on the security-critical result (both resisted injection).
 
-Note that Glimmer **wins on raw generation throughput** and loses anyway, because it spends that advantage on tokens the task did not require.
+Note that Glimmer **wins on raw generation throughput by ~35%** and loses anyway, because it spends that advantage — and much more — on tokens and tool calls the task did not require. If its tool discipline can be fixed by prompting, this decision is worth revisiting: speed is not promptable, and Glimmer is the model `docs/spec.md` §2 selected.
 
 Glimmer is not a bad model — it never got an answer *wrong*. It is simply less disciplined about when *not* to act, and that costs minutes per turn.
 
@@ -107,8 +120,9 @@ The endpoint and model are config values (`assistant/config.yaml`), so this is a
 
 ## Caveats
 
-- **Throttled host (most important).** Every timing was taken on battery with Low Power Mode on and load average ~21. Treat all absolute seconds and tok/s figures as a floor. Re-run on AC with `powermode 0` and an otherwise idle machine before quoting any number as a performance characteristic of the models.
+- **The eval suite has not been re-run on AC.** Only the throughput benchmark was. The per-task table is a throttled floor; its ratios should survive a re-run (both models were throttled equally) but the seconds will not.
 - **The spec-aligned runtime was never exercised.** Results are GGUF-engine, no DFlash. See "Runtime: we benchmarked the wrong build" above.
+- **Throughput is bursty, not a single number.** Quoting one tok/s figure is misleading — see the two measurement traps above.
 - Single run per model; no repetitions, so per-task times carry normal LLM variance. The 5–10× gaps on the wandering tasks are far larger than plausible noise, but the smaller deltas (e.g. `open-app`) are not meaningful.
 - `list-desktop` is the one task where Qwen was slower (70.6s vs 25.2s) — noted for honesty; it does not change the overall picture.
 - Calendar timings for both are dominated by the AppleScript query itself, not the model.
