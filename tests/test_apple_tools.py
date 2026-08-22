@@ -64,3 +64,59 @@ def test_generic_error_becomes_error_string():
 
     tools = by_name(make_apple_tools(runner=BoomRunner()))
     assert tools["list_calendar_events"].func({"days_ahead": 7}).startswith("ERROR:")
+
+
+def test_calendar_name_produces_single_calendar_script():
+    runner = FakeRunner()
+    tools = by_name(make_apple_tools(runner=runner))
+    tools["list_calendar_events"].func({"days_ahead": 7, "calendar_name": "Work"})
+    script = runner.scripts[0]
+    assert 'calendar "Work"' in script
+    assert "repeat with cal in calendars" not in script
+
+
+def test_omitting_calendar_name_searches_all_calendars():
+    runner = FakeRunner()
+    tools = by_name(make_apple_tools(runner=runner))
+    tools["list_calendar_events"].func({"days_ahead": 7})
+    script = runner.scripts[0]
+    assert "repeat with cal in calendars" in script
+    assert 'calendar "' not in script
+
+
+def test_calendar_name_with_quote_is_escaped():
+    runner = FakeRunner()
+    tools = by_name(make_apple_tools(runner=runner))
+    tools["list_calendar_events"].func(
+        {"days_ahead": 7, "calendar_name": 'evil" & do shell script "rm -rf /'}
+    )
+    script = runner.scripts[0]
+    assert 'evil" & do shell script' not in script
+    assert '\\"' in script
+
+
+def test_calendar_read_requests_extended_timeout():
+    # The all-calendars "whose" filter is slow enough to blow past the
+    # default 30s subprocess timeout, so the calendar read must ask for a
+    # longer budget when the runner supports it.
+    seen_timeouts = []
+
+    def runner(script, timeout=30):
+        seen_timeouts.append(timeout)
+        return "ok"
+
+    tools = by_name(make_apple_tools(runner=runner))
+    tools["list_calendar_events"].func({"days_ahead": 7})
+    assert seen_timeouts == [120]
+
+
+def test_other_apple_calls_do_not_request_extended_timeout():
+    seen_timeouts = []
+
+    def runner(script, timeout=30):
+        seen_timeouts.append(timeout)
+        return "ok"
+
+    tools = by_name(make_apple_tools(runner=runner))
+    tools["list_recent_mail"].func({"count": 3})
+    assert seen_timeouts == [30]
