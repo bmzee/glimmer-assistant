@@ -31,7 +31,12 @@ class PermissionGate:
             and self._trust.has_ingested_untrusted()
         )
         if tier == RiskTier.CONFIRM or elevated:
-            request = build_confirm_request(tool.name, args)
+            request = build_confirm_request(
+                tool.name,
+                args,
+                elevated=elevated,
+                trust_sources=self._trust.sources() if self._trust else (),
+            )
             allowed = self._confirmer(request)
             self._record(
                 tool, args, "confirmed" if allowed else "denied", elevated=elevated

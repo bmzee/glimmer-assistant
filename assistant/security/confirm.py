@@ -21,8 +21,25 @@ class ConfirmRequest:
     tool_name: str
     args: dict
     preview: str
+    elevated: bool = False
+    trust_sources: tuple[str, ...] = ()
 
 
-def build_confirm_request(tool_name: str, args: dict) -> ConfirmRequest:
+def build_confirm_request(
+    tool_name: str,
+    args: dict,
+    *,
+    elevated: bool = False,
+    trust_sources: tuple[str, ...] = (),
+) -> ConfirmRequest:
     rendered = tool_name + " " + " ".join(f"{k}={v}" for k, v in args.items())
-    return ConfirmRequest(tool_name=tool_name, args=args, preview=sanitize_preview(rendered))
+    if elevated:
+        sources = ", ".join(sanitize_preview(s) for s in trust_sources) or "an earlier tool"
+        rendered = f"[ELEVATED — untrusted content from {sources} is in this session] {rendered}"
+    return ConfirmRequest(
+        tool_name=tool_name,
+        args=args,
+        preview=sanitize_preview(rendered),
+        elevated=elevated,
+        trust_sources=trust_sources,
+    )

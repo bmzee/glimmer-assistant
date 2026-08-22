@@ -42,6 +42,25 @@ def test_sanitize_rejects_osc_with_bel_terminator():
     assert "command" in clean and "echo" in clean
 
 
+def test_elevated_request_preview_flags_elevation_and_source():
+    req = build_confirm_request(
+        "send_mail",
+        {"to": "bob@example.com"},
+        elevated=True,
+        trust_sources=("read_mail_message",),
+    )
+    assert req.elevated is True
+    assert req.trust_sources == ("read_mail_message",)
+    assert "ELEVATED" in req.preview
+    assert "read_mail_message" in req.preview
+
+
+def test_non_elevated_request_preview_has_no_elevation_marker():
+    req = build_confirm_request("send_mail", {"to": "bob@example.com"})
+    assert req.elevated is False
+    assert "ELEVATED" not in req.preview
+
+
 def test_sanitize_rejects_8bit_c1_csi():
     """Regression: 8-bit C1 CSI attack."""
     dirty = "before\x9b31mafter"

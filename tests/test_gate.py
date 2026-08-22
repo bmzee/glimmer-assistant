@@ -161,6 +161,42 @@ def test_outbound_undo_tier_is_elevated_after_untrusted_ingest(tmp_path):
     assert records[-1].get("elevated") is True
 
 
+def test_elevated_confirm_request_is_flagged_and_names_the_ingesting_tool(tmp_path):
+    # IMPORTANT-8: an elevated confirmation must not look identical to a
+    # routine one — the human needs to see that untrusted content may have
+    # induced this action, and which tool ingested it.
+    from assistant.security.trust import SessionTrust
+    from assistant.security.gate import PermissionGate
+    from assistant.security.log import ActionLog
+    from assistant.tools.registry import RiskTier
+
+    seen = []
+    trust = SessionTrust()
+    trust.note_untrusted_ingest("read_mail_message")
+    gate = PermissionGate(
+        ActionLog(tmp_path / "a.jsonl"),
+        confirmer=lambda req: seen.append(req) or True,
+        trust=trust,
+    )
+    gate.check(outbound_tool(RiskTier.AUTO), {})
+
+    assert len(seen) == 1
+    assert seen[0].elevated is True
+    assert "ELEVATED" in seen[0].preview
+    assert "read_mail_message" in seen[0].preview
+
+
+def test_non_elevated_confirm_request_has_no_elevation_marker(tmp_path):
+    seen = []
+    log = ActionLog(tmp_path / "a.jsonl")
+    gate = PermissionGate(log, confirmer=lambda req: seen.append(req) or True)
+    gate.check(make_tool(RiskTier.CONFIRM), {"command": "ls"})
+
+    assert len(seen) == 1
+    assert seen[0].elevated is False
+    assert "ELEVATED" not in seen[0].preview
+
+
 def test_elevated_denial_blocks(tmp_path):
     from assistant.security.trust import SessionTrust
     from assistant.security.gate import PermissionGate
