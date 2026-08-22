@@ -10,6 +10,8 @@ from assistant.security.log import ActionLog
 from assistant.security.quarantine import datamark
 from assistant.security.trust import SessionTrust
 from assistant.tools.registry import RiskTier, ToolRegistry
+# Pure text handling (imports only `re`); no voice dependency is pulled in.
+from assistant.voice.streaming import SentenceAccumulator, split_sentences
 
 
 class AgentLoop:
@@ -25,6 +27,7 @@ class AgentLoop:
         trust: SessionTrust | None = None,
         context_max_tokens: int = 131072,
         compact_threshold: float = 0.65,
+        min_sentence_chars: int = 0,
     ):
         self._llm = llm
         self._registry = registry
@@ -36,8 +39,15 @@ class AgentLoop:
         self._trust = trust
         self._context_max_tokens = context_max_tokens
         self._compact_threshold = compact_threshold
+        self._min_sentence_chars = min_sentence_chars
 
-    def run(self, user_text: str) -> str:
+    def run(self, user_text: str, on_sentence=None) -> str:
+        """Run a turn.
+
+        With ``on_sentence`` the loop streams and hands over each sentence the
+        moment it completes, so speech starts before generation finishes. Without
+        it the blocking API is used and behaviour is unchanged.
+        """
         messages: list[dict] = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text},
@@ -53,7 +63,7 @@ class AgentLoop:
                     if not should_compact(candidate, self._context_max_tokens, self._compact_threshold):
                         break
                 self._on_compact()
-            msg = self._llm.chat(messages, schemas)
+            msg = self._chat(messages, schemas, on_sentence)
             if not getattr(msg, "tool_calls", None):
                 return msg.content or ""
 
@@ -83,7 +93,27 @@ class AgentLoop:
                     }
                 )
 
-        return "I hit my step limit before finishing; here is where I stopped."
+        limit = "I hit my step limit before finishing; here is where I stopped."
+        if on_sentence is not None:
+            for sentence in split_sentences(limit):
+                on_sentence(sentence)
+        return limit
+
+    def _chat(self, messages: list[dict], schemas: list[dict], on_sentence):
+        if on_sentence is None:
+            return self._llm.chat(messages, schemas)
+        accumulator = SentenceAccumulator(min_chars=self._min_sentence_chars)
+
+        def on_delta(delta: str) -> None:
+            for sentence in accumulator.feed(delta):
+                on_sentence(sentence)
+
+        msg = self._llm.chat_stream(messages, schemas, on_delta=on_delta)
+        # A turn ending in a tool call may carry a spoken preamble; flush it
+        # so the user hears the whole thing, not just its complete sentences.
+        for sentence in accumulator.flush():
+            on_sentence(sentence)
+        return msg
 
     def _execute(self, name: str, raw_arguments: str) -> str:
         tool = self._registry.get(name)

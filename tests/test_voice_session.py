@@ -166,3 +166,83 @@ def test_stt_failure_is_spoken_not_raised():
 
     # error message was spoken (recovery succeeded with working TTS)
     assert any("something went wrong" in s.lower() for s in tts.spoken)
+
+
+# --- streaming: speak sentences as the agent produces them -------------------
+#
+# The session previously waited for the complete answer before speaking any of
+# it, which is the dominant term in the spec SS9 latency gate (docs/latency.md).
+# When the agent supports on_sentence, the session hands TTS each sentence as
+# it is produced. Agents that do not support it must keep working unchanged.
+
+
+class StreamingFakeAgent:
+    """Emits sentences through on_sentence, like the real AgentLoop."""
+
+    def __init__(self, sentences):
+        self.sentences = sentences
+        self.streamed = False
+
+    def run(self, text, on_sentence=None):
+        if on_sentence is not None:
+            self.streamed = True
+            for s in self.sentences:
+                on_sentence(s)
+        return " ".join(self.sentences)
+
+
+def test_streams_sentences_to_tts_when_the_agent_supports_it():
+    ptt = FakePTT([audio()])
+    agent = StreamingFakeAgent(["First part.", "Second part."])
+    tts = FakeTTS()
+    session = VoiceSession(ptt, FakeSTT("hello"), agent, tts)
+
+    session.run_once()
+
+    assert agent.streamed is True
+    assert tts.spoken == ["First part.", "Second part."]
+
+
+def test_speech_begins_before_the_agent_returns():
+    """Fails on any implementation that waits for the full reply."""
+    order = []
+
+    class SlowTailAgent:
+        def run(self, text, on_sentence=None):
+            on_sentence("Ready.")
+            order.append("agent-still-working")
+            return "Ready. And the rest."
+
+    class RecordingTTS:
+        def speak(self, text):
+            order.append(f"spoke:{text}")
+
+    session = VoiceSession(FakePTT([audio()]), FakeSTT("hi"), SlowTailAgent(),
+                           RecordingTTS())
+    session.run_once()
+
+    assert order.index("spoke:Ready.") < order.index("agent-still-working")
+
+
+def test_non_streaming_agent_still_works():
+    """Duck-typed agents without on_sentence must not break the session."""
+    ptt = FakePTT([audio()])
+    agent = FakeAgent("Alpha. Beta.")
+    tts = FakeTTS()
+    session = VoiceSession(ptt, FakeSTT("hi"), agent, tts)
+
+    session.run_once()
+
+    assert tts.spoken == ["Alpha.", "Beta."]
+
+
+def test_streaming_reply_is_not_spoken_twice():
+    """Guards the obvious bug: stream the sentences AND re-split the reply."""
+    ptt = FakePTT([audio()])
+    agent = StreamingFakeAgent(["Only once."])
+    tts = FakeTTS()
+    session = VoiceSession(ptt, FakeSTT("hi"), agent, tts)
+
+    session.run_once()
+
+    assert tts.spoken == ["Only once."]
