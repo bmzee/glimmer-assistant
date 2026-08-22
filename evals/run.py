@@ -41,11 +41,16 @@ def score(task: dict, answer: str, tools_used: list[str]) -> dict:
 
 
 def _tools_from_log(log_path: Path, since: int) -> list[str]:
-    """Ground truth: which tools actually executed, from the audit log."""
+    """Ground truth: which tools actually executed, from the audit log.
+
+    Deduplicates while preserving first-seen order (AUTO + tool_result both
+    record the same tool; DENIED/REFUSED tools are excluded).
+    """
     if not log_path.exists():
         return []
     lines = log_path.read_text().splitlines()[since:]
     used = []
+    seen = set()
     for line in lines:
         try:
             record = json.loads(line)
@@ -53,7 +58,9 @@ def _tools_from_log(log_path: Path, since: int) -> list[str]:
             continue
         name = record.get("tool")
         if name and record.get("decision") in (None, "auto", "confirmed"):
-            used.append(name)
+            if name not in seen:
+                used.append(name)
+                seen.add(name)
     return used
 
 
@@ -73,6 +80,7 @@ def run_task(task: dict, loop, log_path: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
+    parser.add_argument("--config", default=None, help="Path to assistant config file")
     parser.add_argument("--tasks", default="evals/tasks.yaml")
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
@@ -80,15 +88,18 @@ def main() -> None:
     from assistant.config import load_config
     from assistant.main import build_loop
 
-    cfg = load_config(None)
+    cfg = load_config(args.config)
     cfg.llm_model = args.model
     log_path = Path(cfg.log_path).expanduser()
 
+    # Build a fresh loop per task to isolate SessionTrust state and prevent
+    # order-dependent scoring (untrusted tools flip trust for the whole run).
     # Evals must be non-interactive: auto-decline every confirmation, so a
     # Tier-2 tool can never fire unattended during a benchmark run.
-    loop = build_loop(cfg, lambda request: False, "darwin")
+    def build_task_loop():
+        return build_loop(cfg, lambda request: False, "darwin")
 
-    results = [run_task(t, loop, log_path) for t in load_tasks(args.tasks)]
+    results = [run_task(t, build_task_loop(), log_path) for t in load_tasks(args.tasks)]
     passed = sum(1 for r in results if r["passed"])
     summary = {
         "model": args.model,
