@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from assistant.security.confirm import ConfirmRequest
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
 from assistant.tools.registry import RiskTier, Tool
@@ -19,7 +20,7 @@ def make_tool(tier: RiskTier) -> Tool:
 
 def make_gate(tmp_path: Path, answer: bool):
     log_path = tmp_path / "a.jsonl"
-    gate = PermissionGate(ActionLog(log_path), confirmer=lambda desc: answer)
+    gate = PermissionGate(ActionLog(log_path), confirmer=lambda req: answer)
     return gate, log_path
 
 
@@ -51,7 +52,17 @@ def test_confirm_respects_answer(tmp_path):
 def test_never_refused_without_asking(tmp_path):
     asked = []
     log_path = tmp_path / "a.jsonl"
-    gate = PermissionGate(ActionLog(log_path), confirmer=lambda d: asked.append(d) or True)
+    gate = PermissionGate(ActionLog(log_path), confirmer=lambda req: asked.append(req) or True)
     assert gate.check(make_tool(RiskTier.NEVER), {}) is False
     assert asked == []
     assert decisions(log_path) == ["refused"]
+
+
+def test_confirm_receives_structured_request(tmp_path):
+    seen = []
+    log = ActionLog(tmp_path / "a.jsonl")
+    gate = PermissionGate(log, confirmer=lambda req: seen.append(req) or True)
+    gate.check(make_tool(RiskTier.CONFIRM), {"command": "ls"})
+    assert isinstance(seen[0], ConfirmRequest)
+    assert seen[0].tool_name == "t"
+    assert "ls" in seen[0].preview

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Callable
 
+from assistant.security.confirm import ConfirmRequest, build_confirm_request
 from assistant.security.log import ActionLog
 from assistant.tools.registry import RiskTier, Tool
 
 
 class PermissionGate:
-    def __init__(self, log: ActionLog, confirmer: Callable[[str], bool]):
+    def __init__(self, log: ActionLog, confirmer: Callable[[ConfirmRequest], bool]):
         self._log = log
         self._confirmer = confirmer
 
@@ -17,7 +18,8 @@ class PermissionGate:
             self._record(tool, args, "refused")
             return False
         if tier == RiskTier.CONFIRM:
-            allowed = self._confirmer(f"{tool.name}({args})")
+            request = build_confirm_request(tool.name, args)
+            allowed = self._confirmer(request)
             self._record(tool, args, "confirmed" if allowed else "denied")
             return allowed
         self._record(tool, args, "auto")

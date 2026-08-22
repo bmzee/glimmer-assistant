@@ -34,8 +34,8 @@ def build_loop(cfg: Config, confirmer: Callable[[str], bool], platform: str) -> 
     )
 
 
-def cli_confirm(description: str) -> bool:
-    return input(f"ALLOW? {description} [y/N] ").strip().lower() == "y"
+def cli_confirm(request) -> bool:
+    return input(f"ALLOW? {request.preview} [y/N] ").strip().lower() == "y"
 
 
 def main() -> None:
