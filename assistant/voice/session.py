@@ -41,7 +41,10 @@ class VoiceSession:
                 self._tts.speak(sentence)
         except Exception as e:  # a bad turn must not kill the session
             self._on_event("error", e)
-            self._tts.speak(_ERROR_SPEECH)
+            try:
+                self._tts.speak(_ERROR_SPEECH)
+            except Exception:
+                pass  # TTS itself may be the failure; never let recovery crash the loop
 
     def run_forever(self) -> None:
         try:

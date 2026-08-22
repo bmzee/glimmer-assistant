@@ -100,3 +100,34 @@ def test_run_forever_stops_on_keyboard_interrupt():
 
     session = VoiceSession(InterruptingPTT(), FakeSTT("x"), FakeAgent("y"), FakeTTS())
     session.run_forever()  # returns cleanly, does not propagate
+
+
+def test_tts_failure_does_not_crash_session():
+    class BoomTTS:
+        def speak(self, text):
+            raise RuntimeError("audio dead")
+
+    ptt = FakePTT([audio()])
+    stt = FakeSTT("hello")
+    agent = FakeAgent("Good morning.")
+    tts = BoomTTS()
+    session = VoiceSession(ptt, stt, agent, tts)
+
+    session.run_once()  # must not raise, even though both reply-speak and recovery-speak fail
+
+
+def test_stt_failure_is_spoken_not_raised():
+    class BoomSTT:
+        def transcribe(self, audio, sample_rate):
+            raise RuntimeError("mic broken")
+
+    ptt = FakePTT([audio()])
+    stt = BoomSTT()
+    agent = FakeAgent("unused")
+    tts = FakeTTS()
+    session = VoiceSession(ptt, stt, agent, tts)
+
+    session.run_once()  # must not raise
+
+    # error message was spoken (recovery succeeded with working TTS)
+    assert any("something went wrong" in s.lower() for s in tts.spoken)
