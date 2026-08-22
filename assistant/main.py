@@ -21,9 +21,11 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         registry.register(tool)
     if platform == "darwin":
         from assistant.tools.adapters.mac import MacAdapter
+        from assistant.tools.shell import make_shell_tool
 
         for tool in make_app_tools(MacAdapter(), roots):
             registry.register(tool)
+        registry.register(make_shell_tool(roots))
     gate = PermissionGate(ActionLog(cfg.log_path), confirmer)
     return AgentLoop(
         LLMClient(cfg),

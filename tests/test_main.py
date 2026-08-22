@@ -6,7 +6,7 @@ def test_build_loop_darwin_registers_expected_tools(tmp_path):
     cfg = Config(allowed_roots=[str(tmp_path)], log_path=str(tmp_path / "a.jsonl"))
     loop = build_loop(cfg, confirmer=lambda req: False, platform="darwin")
     names = {t.name for t in loop._registry.available("darwin")}
-    assert names == {"list_dir", "read_file", "open_app", "open_path"}
+    assert names == {"list_dir", "read_file", "open_app", "open_path", "run_shell"}
 
 
 def test_build_loop_win32_gets_cross_platform_tools_only(tmp_path):
