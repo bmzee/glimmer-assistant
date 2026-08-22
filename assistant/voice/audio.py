@@ -47,6 +47,13 @@ class HotkeyPushToTalk:
         recorder_factory=None,
         listener_factory=None,
     ):
+        # validate the hotkey names a real modifier/named key
+        from pynput import keyboard
+
+        if getattr(keyboard.Key, hotkey, None) is None:
+            valid = ", ".join(sorted(k.name for k in keyboard.Key))
+            raise ValueError(f"unknown voice_hotkey {hotkey!r}; must be one of: {valid}")
+
         self._hotkey = hotkey
         self._sample_rate = sample_rate
         self._min_seconds = min_seconds

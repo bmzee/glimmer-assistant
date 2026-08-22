@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from assistant.voice.audio import HotkeyPushToTalk, assemble
 
@@ -42,3 +43,12 @@ def test_run_cycle_returns_none_when_too_short():
     rec = FakeRecorder([np.zeros(1000, dtype="float32")])  # ~0.06s < 0.3s
     ptt = HotkeyPushToTalk(sample_rate=16000, min_seconds=0.3)
     assert ptt._run_cycle(rec, wait_for_release=lambda: None) is None
+
+
+def test_invalid_hotkey_raises():
+    with pytest.raises(ValueError):
+        HotkeyPushToTalk(hotkey="not_a_key")
+
+
+def test_valid_hotkey_ok():
+    HotkeyPushToTalk(hotkey="ctrl")
