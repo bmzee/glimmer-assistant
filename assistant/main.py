@@ -54,5 +54,7 @@ def main() -> None:
         if text:
             try:
                 print(loop.run(text))
+            except KeyboardInterrupt:
+                print("\n(interrupted)")
             except Exception as e:
                 print(f"error: {e}")

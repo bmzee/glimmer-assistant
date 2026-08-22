@@ -39,3 +39,10 @@ def test_empty_tools_sent_as_none():
     llm = LLMClient(Config(), client=stub)
     llm.chat([{"role": "user", "content": "x"}], [])
     assert completions.last_kwargs["tools"] is None
+
+
+def test_chat_passes_timeout():
+    stub, completions = make_stub(SimpleNamespace(content="hi", tool_calls=None))
+    llm = LLMClient(Config(llm_timeout_seconds=7.5), client=stub)
+    llm.chat([{"role": "user", "content": "x"}], [])
+    assert completions.last_kwargs["timeout"] == 7.5

@@ -42,3 +42,7 @@ def test_allowed_roots_invalid_type_raises(tmp_path: Path):
     f.write_text("allowed_roots: 42\n")
     with pytest.raises(ValueError):
         load_config(f)
+
+
+def test_llm_timeout_default():
+    assert load_config(None).llm_timeout_seconds == 120.0

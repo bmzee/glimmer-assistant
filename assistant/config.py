@@ -11,6 +11,7 @@ class Config:
     llm_base_url: str = "http://localhost:11434/v1"
     llm_model: str = "muse-glimmer:30b"
     llm_api_key: str = "ollama"  # Ollama ignores the value but the SDK requires one
+    llm_timeout_seconds: float = 120.0
     max_iterations: int = 15
     tool_result_max_chars: int = 16000
     allowed_roots: list[str] = field(default_factory=lambda: ["~"])
