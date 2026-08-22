@@ -6,6 +6,15 @@ dependencies = ["openai>=1.50", "pyyaml>=6.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+voice = [
+    "parakeet-mlx>=0.5",
+    "kokoro-onnx>=0.4",
+    "sounddevice>=0.5",
+    "pynput>=1.8",
+    "soundfile>=0.13",
+    "numpy>=2.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["integration: needs real voice models (set GLIMMER_VOICE_INTEGRATION=1)"]

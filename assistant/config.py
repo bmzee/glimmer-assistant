@@ -16,6 +16,10 @@ class Config:
     tool_result_max_chars: int = 16000
     allowed_roots: list[str] = field(default_factory=lambda: ["~"])
     log_path: str = "~/.glimmer-assistant/actions.jsonl"
+    voice_stt_model: str = "mlx-community/parakeet-tdt-0.6b-v2"
+    voice_tts_voice: str = "af_heart"
+    voice_hotkey: str = "ctrl"
+    voice_min_utterance_seconds: float = 0.3
 
 
 def load_config(path: str | Path | None = None) -> Config:

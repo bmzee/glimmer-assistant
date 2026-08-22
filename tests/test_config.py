@@ -46,3 +46,11 @@ def test_allowed_roots_invalid_type_raises(tmp_path: Path):
 
 def test_llm_timeout_default():
     assert load_config(None).llm_timeout_seconds == 120.0
+
+
+def test_voice_config_defaults():
+    cfg = load_config(None)
+    assert cfg.voice_stt_model == "mlx-community/parakeet-tdt-0.6b-v2"
+    assert cfg.voice_tts_voice == "af_heart"
+    assert cfg.voice_hotkey == "ctrl"
+    assert cfg.voice_min_utterance_seconds == 0.3
