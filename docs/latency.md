@@ -99,21 +99,43 @@ it emits 70–80 characters of thinking before its first spoken word — even fo
 **8.4×.** Disabling thinking would clear the gate outright — projected ~0.91s
 against a 2.5s budget.
 
-It is deliberately **not** applied. Thinking is what makes the model good at
-choosing tools and sequencing multi-step work, which is the very reason it was
-chosen over Glimmer (`docs/model-ab.md`), and the 10-task eval has not been
-re-run with `think=False` to measure the cost. Turning it off to win a latency
-number, without checking what it does to the 10/10 task score, would be trading
-an unmeasured quality regression for 1.7s.
+**It was measured, and it is rejected.** The 10-task eval was re-run on AC with
+reasoning suppressed:
 
-The honest options, in order of preference:
+| | eval score | `</think>` leaked into visible text |
+|---|---:|---:|
+| reasoning on (default) | **10/10** | 0/22 |
+| `reasoning_effort: "none"` | **9/10** | **1/10** |
 
-1. **Re-run the eval suite with `think=False`.** If the task score holds, take
-   it — the gate passes with ~1.6s of margin and nothing is lost.
-2. **Disable thinking only for turns with no tool calls.** Keeps reasoning
-   where it earns its cost; the §9 gate specifically measures a no-tool answer.
-3. **Accept 2.59s.** It is 0.09s over a round-number target, and the answer is
-   already streaming so the user hears speech begin promptly.
+Two independent reasons not to ship it:
+
+1. **It costs task accuracy, on tool use.** `read-file` failed: without
+   reasoning the model could not resolve `~`, fell back to `run_shell` (which
+   the harness auto-declines), and gave up — *"the tool couldn't determine your
+   home directory and the shell command to fall back on was declined"*. With
+   reasoning on, the same task answers in 12.0s. This is exactly the
+   tool-selection quality that decided the model choice in `docs/model-ab.md`.
+2. **It leaks reasoning markers into spoken output.** Suppression does not
+   cleanly remove thinking; it breaks the channel separation, and a literal
+   `</think>` lands mid-answer in `content` — about 1 turn in 10. In the voice
+   path that is handed to TTS and **spoken aloud**. It also rules out the
+   narrower "disable thinking only on no-tool turns" variant, because both
+   observed leaks were on no-tool turns.
+
+The default configuration is clean: 0 leaks in 22 sampled turns with reasoning
+on. `Config.llm_reasoning_effort` stays wired and defaults to `""` (the key is
+omitted from the request entirely), so it is available for a deployment that
+would trade 9/10 for the latency — but it is not the default, and it should not
+be enabled for voice.
+
+### A methodology note
+
+The first attempt to reproduce the leak used a short ad-hoc system prompt and
+passed **no tools**, and found 0/12. That result was worthless: tool presence
+changes the chat template the model is rendered with, which is the machinery
+that emits think markers. Reproducing it required driving the real agent loop
+with the real system prompt and schemas. When a defect appears under the full
+configuration, reproduce it under the full configuration.
 
 The streaming work itself is done and is what took the gate from 10.87s to
 2.59s. What is left is a model-configuration decision with a real tradeoff, not

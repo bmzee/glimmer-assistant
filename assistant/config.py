@@ -16,8 +16,11 @@ class Config:
     llm_api_key: str = "ollama"  # Ollama ignores the value but the SDK requires one
     llm_timeout_seconds: float = 120.0
     # Reasoning models emit hidden thinking tokens before their first visible
-    # token. "none" suppresses that. Empty means "send nothing", so endpoints
-    # that reject the parameter keep working. See docs/latency.md.
+    # token. "none" suppresses that (7.5x faster to first token) but MEASURED
+    # WORSE: eval drops 10/10 -> 9/10 (fails on tool use) and a literal
+    # "</think>" leaks into visible text ~1 turn in 10, which the voice path
+    # would speak aloud. Do not enable for voice. Empty means the key is
+    # omitted entirely, so endpoints that reject it keep working. docs/latency.md
     llm_reasoning_effort: str = ""
     max_iterations: int = 15
     tool_result_max_chars: int = 16000
