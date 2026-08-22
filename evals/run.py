@@ -83,6 +83,12 @@ def main() -> None:
     parser.add_argument("--config", default=None, help="Path to assistant config file")
     parser.add_argument("--tasks", default="evals/tasks.yaml")
     parser.add_argument("--out", default=None)
+    parser.add_argument(
+        "--reasoning-effort",
+        default=None,
+        help='Forwarded as OpenAI reasoning_effort (e.g. "none" to suppress '
+             'hidden thinking tokens). Omitted from the request when unset.',
+    )
     args = parser.parse_args()
 
     from assistant.config import load_config
@@ -90,6 +96,8 @@ def main() -> None:
 
     cfg = load_config(args.config)
     cfg.llm_model = args.model
+    if args.reasoning_effort is not None:
+        cfg.llm_reasoning_effort = args.reasoning_effort
     log_path = Path(cfg.log_path).expanduser()
 
     # Build a fresh loop per task to isolate SessionTrust state and prevent

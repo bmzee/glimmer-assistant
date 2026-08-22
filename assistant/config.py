@@ -15,6 +15,10 @@ class Config:
     llm_model: str = "qwen3.8:27b"
     llm_api_key: str = "ollama"  # Ollama ignores the value but the SDK requires one
     llm_timeout_seconds: float = 120.0
+    # Reasoning models emit hidden thinking tokens before their first visible
+    # token. "none" suppresses that. Empty means "send nothing", so endpoints
+    # that reject the parameter keep working. See docs/latency.md.
+    llm_reasoning_effort: str = ""
     max_iterations: int = 15
     tool_result_max_chars: int = 16000
     allowed_roots: list[str] = field(default_factory=lambda: ["~"])

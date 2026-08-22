@@ -41,6 +41,13 @@ class LLMClient:
         )
         self._model = cfg.llm_model
         self._timeout = cfg.llm_timeout_seconds
+        self._reasoning_effort = getattr(cfg, "llm_reasoning_effort", "") or ""
+
+    def _extra_body(self) -> dict:
+        """Omit the key entirely when unset, rather than sending a null."""
+        if not self._reasoning_effort:
+            return {}
+        return {"reasoning_effort": self._reasoning_effort}
 
     def chat(self, messages: list[dict], tools: list[dict]):
         response = self._client.chat.completions.create(
@@ -48,6 +55,7 @@ class LLMClient:
             messages=messages,
             tools=tools or None,
             timeout=self._timeout,
+            extra_body=self._extra_body(),
         )
         return response.choices[0].message
 
@@ -69,6 +77,7 @@ class LLMClient:
             tools=tools or None,
             timeout=self._timeout,
             stream=True,
+            extra_body=self._extra_body(),
         )
         reply = _StreamedReply()
         by_index: dict[int, _StreamedToolCall] = {}
