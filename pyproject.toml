@@ -15,6 +15,7 @@ voice = [
     "numpy>=2.0",
 ]
 web = ["playwright>=1.60"]
+m365 = ["msal>=1.30"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
