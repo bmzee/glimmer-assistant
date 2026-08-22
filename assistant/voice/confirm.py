@@ -1,7 +1,16 @@
 from __future__ import annotations
 
-_YES = ("yes", "yeah", "yep", "approve", "confirm", "do it", "go ahead")
-_NO = ("no", "nope", "cancel", "stop", "don't", "do not")
+import re
+
+_YES = ("yes", "yeah", "yep", "yup", "approve", "confirm", "do it", "go ahead", "send it", "okay", "ok")
+_NO = ("no", "nope", "cancel", "stop", "don't", "dont", "do not", "negative")
+# Negations that would otherwise leave a YES word intact ("never confirm", "won't approve")
+_NEGATIONS = ("never", "won't", "wont", "cannot", "can't", "cant", "not", "disapprove", "disapproved", "unapproved", "abort")
+
+
+def _matches(answer: str, phrases) -> bool:
+    """Check if any phrase matches as a whole word in answer."""
+    return any(re.search(r"\b" + re.escape(p) + r"\b", answer) for p in phrases)
 
 
 class SpokenConfirmer:
@@ -25,9 +34,9 @@ class SpokenConfirmer:
                 answer = self._stt.transcribe(audio, sample_rate).strip().lower()
             except Exception:
                 return False  # fail closed on any error
-            if any(word in answer for word in _NO):
+            if _matches(answer, _NO) or _matches(answer, _NEGATIONS):
                 return False
-            if any(word in answer for word in _YES):
+            if _matches(answer, _YES):
                 return True
             prompt = "Sorry, I did not catch that. Say yes to approve, or no to cancel."
         try:

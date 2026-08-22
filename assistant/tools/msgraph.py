@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import urllib.request
 from pathlib import Path
+from urllib.parse import quote
 
 from assistant.tools.registry import RiskTier, Tool
 
@@ -37,8 +38,11 @@ class GraphAuth:
     def _save_cache(self) -> None:
         cache = getattr(self, "_cache", None)
         if cache is not None and cache.has_state_changed:
+            import os
             self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            os.chmod(self._cache_path.parent, 0o700)
             self._cache_path.write_text(cache.serialize())
+            os.chmod(self._cache_path, 0o600)  # refresh tokens: owner-only
 
     def get_token(self) -> str:
         app = self._application()
@@ -105,7 +109,8 @@ def make_msgraph_tools(client) -> list[Tool]:
 
     def m365_read_mail(args: dict) -> str:
         try:
-            item = client.get(f"/me/messages/{args['message_id']}")
+            msg_id = quote(str(args['message_id']), safe="")
+            item = client.get(f"/me/messages/{msg_id}")
         except Exception as e:
             return f"ERROR: {e}"
         sender = item.get("from", {}).get("emailAddress", {}).get("address", "?")
