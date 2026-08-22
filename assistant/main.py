@@ -39,8 +39,32 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
     )
 
 
+def _voice_declines(request) -> bool:
+    # Tier-2 CONFIRM tools cannot be confirmed by voice in Plan 3; decline safely.
+    return False
+
+
 def cli_confirm(request) -> bool:
     return input(f"ALLOW? {request.preview} [y/N] ").strip().lower() == "y"
+
+
+def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
+    from assistant.voice.session import VoiceSession
+
+    loop = build_loop(cfg, _voice_declines, platform)
+    if stt is None:
+        from assistant.voice.stt import ParakeetSTT
+
+        stt = ParakeetSTT(cfg.voice_stt_model)
+    if tts is None:
+        from assistant.voice.tts import KokoroTTS
+
+        tts = KokoroTTS(cfg.voice_tts_voice)
+    if ptt is None:
+        from assistant.voice.audio import HotkeyPushToTalk
+
+        ptt = HotkeyPushToTalk(cfg.voice_hotkey, min_seconds=cfg.voice_min_utterance_seconds)
+    return VoiceSession(ptt, stt, loop, tts, min_utterance_seconds=cfg.voice_min_utterance_seconds)
 
 
 def main() -> None:
@@ -48,6 +72,13 @@ def main() -> None:
 
     config_path = Path(__file__).parent / "config.yaml"
     cfg = load_config(config_path if config_path.exists() else None)
+
+    if "--voice" in sys.argv:
+        session = build_voice_session(cfg, sys.platform)
+        print("glimmer-assistant voice mode. Hold the hotkey to talk. Ctrl-C to exit.")
+        session.run_forever()
+        return
+
     loop = build_loop(cfg, cli_confirm, sys.platform)
     print("glimmer-assistant text mode. Ctrl-D to exit.")
     while True:

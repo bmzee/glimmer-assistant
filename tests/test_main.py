@@ -15,3 +15,26 @@ def test_build_loop_win32_gets_cross_platform_tools_only(tmp_path):
     names = {t.name for t in loop._registry.available("win32")}
     # win32 has no adapter yet (Plan 2+), so only stdlib file tools register
     assert names == {"list_dir", "read_file"}
+
+
+def test_build_voice_session_wires_components(tmp_path):
+    from assistant.main import build_voice_session
+
+    class FakePTT:
+        def capture_utterance(self):
+            return None
+
+    class FakeSTT:
+        def transcribe(self, audio, sr):
+            return ""
+
+    class FakeTTS:
+        def speak(self, text):
+            pass
+
+    cfg = Config(allowed_roots=[str(tmp_path)], log_path=str(tmp_path / "a.jsonl"))
+    session = build_voice_session(
+        cfg, platform="darwin", stt=FakeSTT(), tts=FakeTTS(), ptt=FakePTT()
+    )
+    # smoke: one cycle with a None utterance does nothing and does not raise
+    session.run_once()
