@@ -35,6 +35,25 @@ def test_search_web_is_untrusted():
     assert tools["search_web"].untrusted is True
 
 
+def test_all_web_tools_are_outbound():
+    # CRITICAL-1: web tools are a real network-egress channel — Playwright runs
+    # in-process, so the sandbox's network-egress denial does not cover them.
+    # outbound=True is what makes the Rule-of-Two gate require confirmation once
+    # untrusted content has entered the session (the exfiltration leg).
+    tools = by_name(make_web_tools(browser=FakeBrowser()))
+    assert tools["open_url"].outbound is True
+    assert tools["read_page"].outbound is True
+    assert tools["search_web"].outbound is True
+
+
+def test_open_url_is_untrusted():
+    # CRITICAL-2: open_url returns page.title(), which is fully attacker-
+    # controlled. It must be datamarked and must flip SessionTrust, exactly
+    # like read_page/search_web.
+    tools = by_name(make_web_tools(browser=FakeBrowser()))
+    assert tools["open_url"].untrusted is True
+
+
 def test_open_url_navigates_and_returns_title():
     fake = FakeBrowser()
     tools = by_name(make_web_tools(browser=fake))
