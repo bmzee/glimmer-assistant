@@ -1,5 +1,3 @@
-import glob
-
 import numpy as np
 
 
@@ -25,6 +23,7 @@ def test_parakeet_transcribe_uses_model_and_returns_text(monkeypatch, tmp_path):
 
 
 def test_transcribe_does_not_leak_file_descriptors():
+    import os
     from assistant.voice.stt import ParakeetSTT
 
     class FakeResult:
@@ -34,13 +33,15 @@ def test_transcribe_does_not_leak_file_descriptors():
         def transcribe(self, path):
             return FakeResult()
 
+    def open_fd_count():
+        # /dev/fd lists this process's open fds on macOS and Linux
+        return len(os.listdir("/dev/fd"))
+
     stt = ParakeetSTT("m", model=FakeModel())
-
-    def open_wavs():
-        return len(glob.glob("/tmp/glimmer-stt-*")) + len(glob.glob("/private/tmp/glimmer-stt-*"))
-
-    before = open_wavs()
+    # warm up one call so any one-time fds are already open
+    stt.transcribe(np.zeros(1600, dtype="float32"), 16000)
+    before = open_fd_count()
     for _ in range(50):
         stt.transcribe(np.zeros(1600, dtype="float32"), 16000)
-    after = open_wavs()
-    assert after <= before  # no temp files left behind, no leak
+    after = open_fd_count()
+    assert after <= before, f"leaked {after - before} fds across 50 transcribes"
