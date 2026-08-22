@@ -301,3 +301,25 @@ def test_untrusted_tool_marks_session_trust(tmp_path):
     loop.run("go")
     assert trust.has_ingested_untrusted() is True
     assert "fetch" in trust.sources()
+
+
+def test_loop_compacts_when_context_grows(tmp_path):
+    # Accumulate messages through tool calls to trigger compaction
+    llm = FakeLLM([
+        assistant_msg(tool_calls=[tool_call("c1", "echo", {}), tool_call("c2", "echo", {})]),
+        assistant_msg(tool_calls=[tool_call("c3", "echo", {}), tool_call("c4", "echo", {})]),
+        assistant_msg(content="done")
+    ])
+    registry = make_registry(lambda a: "x")
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(
+        llm, registry, gate, platform="darwin",
+        context_max_tokens=200, compact_threshold=0.65,  # tiny -> forces compaction
+    )
+    loop.run("x" * 800)
+    # After accumulating messages through tool calls, compaction should happen
+    # Check that at least one of the message lists sent to LLM has a summary
+    for sent in llm.seen_messages:
+        if any("summarized" in str(m.get("content", "")) for m in sent):
+            return  # Compaction happened
+    assert False, "Expected compaction to occur when context grows"

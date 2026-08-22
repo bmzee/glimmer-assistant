@@ -25,6 +25,8 @@ class Config:
     enable_m365: bool = False
     m365_client_id: str = ""
     mcp_servers: list = field(default_factory=list)
+    context_max_tokens: int = 131072
+    compact_threshold: float = 0.65
 
 
 def load_config(path: str | Path | None = None) -> Config:

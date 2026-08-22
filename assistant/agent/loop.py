@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 
+from assistant.agent.compaction import compact, should_compact
 from assistant.agent.prompts import SYSTEM_PROMPT
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
@@ -22,6 +23,8 @@ class AgentLoop:
         tool_result_max_chars: int = 16000,
         log: ActionLog | None = None,
         trust: SessionTrust | None = None,
+        context_max_tokens: int = 131072,
+        compact_threshold: float = 0.65,
     ):
         self._llm = llm
         self._registry = registry
@@ -31,6 +34,8 @@ class AgentLoop:
         self._max_chars = tool_result_max_chars
         self._log = log
         self._trust = trust
+        self._context_max_tokens = context_max_tokens
+        self._compact_threshold = compact_threshold
 
     def run(self, user_text: str) -> str:
         messages: list[dict] = [
@@ -40,6 +45,9 @@ class AgentLoop:
         schemas = self._registry.schemas(self._platform)
 
         for _ in range(self._max_iterations):
+            if should_compact(messages, self._context_max_tokens, self._compact_threshold):
+                messages = compact(messages)
+                self._on_compact()
             msg = self._llm.chat(messages, schemas)
             if not getattr(msg, "tool_calls", None):
                 return msg.content or ""
@@ -110,3 +118,7 @@ class AgentLoop:
         if len(s) <= self._max_chars:
             return s
         return s[: self._max_chars] + "\n[truncated]"
+
+    def _on_compact(self) -> None:
+        if self._log is not None:
+            self._log.append({"event": "context_compacted"})

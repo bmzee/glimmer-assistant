@@ -85,6 +85,8 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         tool_result_max_chars=cfg.tool_result_max_chars,
         log=log,
         trust=trust,
+        context_max_tokens=cfg.context_max_tokens,
+        compact_threshold=cfg.compact_threshold,
     )
 
 
