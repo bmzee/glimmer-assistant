@@ -128,6 +128,25 @@ def test_m365_requires_client_id(tmp_path):
     assert "m365_send_mail" not in names
 
 
+def test_mcp_zero_tools_warns_when_servers_configured(tmp_path, capsys):
+    """A configured-but-inert MCP setup (e.g. no session_factory wired up)
+    must not silently register zero tools without telling the operator."""
+    from assistant.config import Config
+    from assistant.main import build_loop
+    from assistant.tools.mcp_client import MCPServerSpec
+
+    cfg = Config(
+        allowed_roots=[str(tmp_path)],
+        log_path=str(tmp_path / "a.jsonl"),
+        enable_web=False,
+        enable_apple=False,
+        mcp_servers=[MCPServerSpec(name="fs", command="npx")],
+    )
+    build_loop(cfg, lambda r: False, "darwin")
+    out = capsys.readouterr().out
+    assert "[mcp: 0 tools registered from 1 configured server(s)" in out
+
+
 def test_trust_is_shared_between_gate_and_loop(tmp_path):
     from assistant.config import Config
     from assistant.main import build_loop

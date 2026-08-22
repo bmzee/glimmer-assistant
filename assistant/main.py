@@ -64,8 +64,15 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         try:
             from assistant.tools.mcp_client import make_mcp_tools
 
-            for tool in make_mcp_tools(cfg.mcp_servers):
+            mcp_tools = make_mcp_tools(cfg.mcp_servers)
+            for tool in mcp_tools:
                 registry.register(tool)
+            if not mcp_tools:
+                n = len(cfg.mcp_servers)
+                print(
+                    f"[mcp: 0 tools registered from {n} configured server(s) "
+                    "— no session factory configured]"
+                )
         except Exception as e:
             print(f"[mcp tools unavailable: {e}]")
 
