@@ -129,6 +129,38 @@ def test_non_outbound_tool_not_elevated(tmp_path):
     assert asked == []  # reading a file is not outbound; no elevation
 
 
+def test_outbound_undo_tier_is_elevated_after_untrusted_ingest(tmp_path):
+    # Same as the AUTO elevation test above, but for RiskTier.UNDO — elevation
+    # must be tier-agnostic (any outbound tool, not just AUTO ones), so a
+    # future refactor that special-cases AUTO can't silently regress UNDO.
+    from assistant.security.trust import SessionTrust
+    from assistant.security.gate import PermissionGate
+    from assistant.security.log import ActionLog
+    from assistant.tools.registry import RiskTier
+
+    asked = []
+    trust = SessionTrust()
+    log_path = tmp_path / "a.jsonl"
+    gate = PermissionGate(
+        ActionLog(log_path),
+        confirmer=lambda req: asked.append(req) or True,
+        trust=trust,
+    )
+    tool = outbound_tool(RiskTier.UNDO)
+
+    # before ingest: UNDO outbound runs without asking
+    assert gate.check(tool, {}) is True
+    assert asked == []
+
+    # after ingesting untrusted content: the SAME tool must now be confirmed
+    trust.note_untrusted_ingest("read_webpage")
+    assert gate.check(tool, {}) is True
+    assert len(asked) == 1
+
+    records = [json.loads(l) for l in log_path.read_text().splitlines()]
+    assert records[-1].get("elevated") is True
+
+
 def test_elevated_denial_blocks(tmp_path):
     from assistant.security.trust import SessionTrust
     from assistant.security.gate import PermissionGate

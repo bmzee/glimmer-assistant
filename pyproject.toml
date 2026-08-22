@@ -20,4 +20,4 @@ mcp = ["mcp>=2.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["integration: needs real voice models (set GLIMMER_VOICE_INTEGRATION=1)"]
+markers = ["integration: needs real models/services (set GLIMMER_VOICE_INTEGRATION=1 for voice, GLIMMER_INTEGRATION=1 for web/apple)"]

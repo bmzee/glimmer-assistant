@@ -27,6 +27,9 @@ class GraphAuth:
             cache = msal.SerializableTokenCache()
             if self._cache_path.exists():
                 cache.deserialize(self._cache_path.read_text())
+                import os
+
+                os.chmod(self._cache_path, 0o600)  # remediate a stale insecure file
             self._cache = cache
             self._app = msal.PublicClientApplication(
                 self._client_id,

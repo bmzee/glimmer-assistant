@@ -1,4 +1,6 @@
 import json
+import os
+import stat
 from unittest.mock import MagicMock
 
 from assistant.tools.msgraph import GraphAuth, GraphClient, make_msgraph_tools
@@ -136,6 +138,21 @@ def test_auth_failure_raises_clear_error():
         assert False, "Should have raised RuntimeError"
     except RuntimeError as e:
         assert "auth failed" in str(e)
+
+
+def test_stale_cache_file_perms_remediated_on_load(tmp_path):
+    """A pre-fix 0644 cache file must be tightened to 0600 the next time it loads."""
+    import msal
+
+    cache_path = tmp_path / "m365-token.json"
+    cache_path.write_text(msal.SerializableTokenCache().serialize())
+    os.chmod(cache_path, 0o644)
+
+    auth = GraphAuth("client-id", cache_path=cache_path)
+    auth._application()  # loads the existing (insecure) cache file
+
+    mode = stat.S_IMODE(os.stat(cache_path).st_mode)
+    assert mode == 0o600
 
 
 def test_read_mail_url_encodes_message_id():
