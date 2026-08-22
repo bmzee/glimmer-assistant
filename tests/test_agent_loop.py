@@ -234,3 +234,33 @@ def test_post_execution_result_is_logged(tmp_path):
     assert rec["tool"] == "echo"
     assert rec["status"] == "ok"
     assert rec["result_sha256"] == hashlib.sha256(b"the-result").hexdigest()
+
+
+def test_untrusted_tool_marks_session_trust(tmp_path):
+    from assistant.security.trust import SessionTrust
+    from assistant.tools.registry import RiskTier, Tool, ToolRegistry
+
+    trust = SessionTrust()
+    reg = ToolRegistry()
+    reg.register(
+        Tool(
+            name="fetch",
+            description="d",
+            parameters={"type": "object", "properties": {}, "required": []},
+            risk_tier=RiskTier.AUTO,
+            platforms=("darwin",),
+            func=lambda a: "page text",
+            untrusted=True,
+        )
+    )
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "fetch", {})]),
+            assistant_msg(content="done"),
+        ]
+    )
+    gate = PermissionGate(ActionLog(tmp_path / "g.jsonl"), confirmer=lambda r: True)
+    loop = AgentLoop(llm, reg, gate, platform="darwin", trust=trust)
+    loop.run("go")
+    assert trust.has_ingested_untrusted() is True
+    assert "fetch" in trust.sources()

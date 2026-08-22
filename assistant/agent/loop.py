@@ -7,6 +7,7 @@ from assistant.agent.prompts import SYSTEM_PROMPT
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
 from assistant.security.quarantine import datamark
+from assistant.security.trust import SessionTrust
 from assistant.tools.registry import ToolRegistry
 
 
@@ -20,6 +21,7 @@ class AgentLoop:
         max_iterations: int = 15,
         tool_result_max_chars: int = 16000,
         log: ActionLog | None = None,
+        trust: SessionTrust | None = None,
     ):
         self._llm = llm
         self._registry = registry
@@ -28,6 +30,7 @@ class AgentLoop:
         self._max_iterations = max_iterations
         self._max_chars = tool_result_max_chars
         self._log = log
+        self._trust = trust
 
     def run(self, user_text: str) -> str:
         messages: list[dict] = [
@@ -83,6 +86,8 @@ class AgentLoop:
             result = tool.func(args)
             if tool.untrusted:
                 result = datamark(result, tool.name)
+                if self._trust is not None:
+                    self._trust.note_untrusted_ingest(tool.name)
             output = self._truncate(result)
             status = "ok"
         except Exception as e:  # tool bugs must not kill the loop; the model retries

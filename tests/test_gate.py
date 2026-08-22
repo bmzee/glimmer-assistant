@@ -66,3 +66,78 @@ def test_confirm_receives_structured_request(tmp_path):
     assert isinstance(seen[0], ConfirmRequest)
     assert seen[0].tool_name == "t"
     assert "ls" in seen[0].preview
+
+
+def outbound_tool(tier):
+    from assistant.tools.registry import RiskTier, Tool
+
+    return Tool(
+        name="send_mail",
+        description="d",
+        parameters={"type": "object", "properties": {}, "required": []},
+        risk_tier=tier,
+        platforms=("darwin",),
+        func=lambda args: "sent",
+        outbound=True,
+    )
+
+
+def test_outbound_auto_tier_is_elevated_after_untrusted_ingest(tmp_path):
+    from assistant.security.trust import SessionTrust
+    from assistant.security.gate import PermissionGate
+    from assistant.security.log import ActionLog
+    from assistant.tools.registry import RiskTier
+
+    asked = []
+    trust = SessionTrust()
+    log_path = tmp_path / "a.jsonl"
+    gate = PermissionGate(
+        ActionLog(log_path),
+        confirmer=lambda req: asked.append(req) or True,
+        trust=trust,
+    )
+    tool = outbound_tool(RiskTier.AUTO)
+
+    # before ingest: AUTO outbound runs without asking
+    assert gate.check(tool, {}) is True
+    assert asked == []
+
+    # after ingesting untrusted content: the SAME tool must now be confirmed
+    trust.note_untrusted_ingest("read_webpage")
+    assert gate.check(tool, {}) is True
+    assert len(asked) == 1
+
+    records = [json.loads(l) for l in log_path.read_text().splitlines()]
+    assert records[-1].get("elevated") is True
+
+
+def test_non_outbound_tool_not_elevated(tmp_path):
+    from assistant.security.trust import SessionTrust
+    from assistant.security.gate import PermissionGate
+    from assistant.security.log import ActionLog
+    from assistant.tools.registry import RiskTier
+
+    asked = []
+    trust = SessionTrust()
+    trust.note_untrusted_ingest("read_webpage")
+    gate = PermissionGate(
+        ActionLog(tmp_path / "a.jsonl"),
+        confirmer=lambda req: asked.append(req) or True,
+        trust=trust,
+    )
+    assert gate.check(make_tool(RiskTier.AUTO), {}) is True
+    assert asked == []  # reading a file is not outbound; no elevation
+
+
+def test_elevated_denial_blocks(tmp_path):
+    from assistant.security.trust import SessionTrust
+    from assistant.security.gate import PermissionGate
+    from assistant.security.log import ActionLog
+    from assistant.tools.registry import RiskTier
+
+    trust = SessionTrust()
+    trust.note_untrusted_ingest("read_webpage")
+    gate = PermissionGate(
+        ActionLog(tmp_path / "a.jsonl"), confirmer=lambda req: False, trust=trust
+    )
+    assert gate.check(outbound_tool(RiskTier.AUTO), {}) is False

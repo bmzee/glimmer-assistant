@@ -21,6 +21,7 @@ class Tool:
     platforms: tuple[str, ...]  # sys.platform values: "darwin", "win32"
     func: Callable[[dict], str]
     untrusted: bool = False
+    outbound: bool = False
 
 
 class ToolRegistry:
