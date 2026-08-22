@@ -4,6 +4,7 @@ import json
 
 from assistant.agent.prompts import SYSTEM_PROMPT
 from assistant.security.gate import PermissionGate
+from assistant.security.quarantine import datamark
 from assistant.tools.registry import ToolRegistry
 
 
@@ -76,6 +77,8 @@ class AgentLoop:
             return "DENIED: the user did not approve this action."
         try:
             result = tool.func(args)
+            if tool.untrusted:
+                result = datamark(result, tool.name)
             return self._truncate(result)
         except Exception as e:  # tool bugs must not kill the loop; the model retries
             return f"ERROR: {e}"

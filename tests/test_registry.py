@@ -43,3 +43,7 @@ def test_openai_schema_shape():
     assert schema["type"] == "function"
     assert schema["function"]["name"] == "list_dir"
     assert schema["function"]["parameters"]["type"] == "object"
+
+
+def test_tool_untrusted_defaults_false():
+    assert make_tool("x").untrusted is False

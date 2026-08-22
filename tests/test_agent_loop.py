@@ -185,3 +185,29 @@ def test_tool_returns_none(tmp_path):
     loop.run("go")
     tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
     assert tool_msgs[0]["content"].startswith("ERROR:")
+
+
+def test_untrusted_tool_result_is_datamarked(tmp_path):
+    reg = ToolRegistry()
+    reg.register(
+        Tool(
+            name="fetch",
+            description="d",
+            parameters={"type": "object", "properties": {}, "required": []},
+            risk_tier=RiskTier.AUTO,
+            platforms=("darwin",),
+            func=lambda a: "secret instructions",
+            untrusted=True,
+        )
+    )
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "fetch", {})]),
+            assistant_msg(content="done"),
+        ]
+    )
+    loop = make_loop(tmp_path, llm, reg)
+    loop.run("go")
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    assert "untrusted" in tool_msgs[0]["content"].lower()
+    assert "secret instructions" in tool_msgs[0]["content"]
