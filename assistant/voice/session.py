@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Callable
 
 from assistant.voice.streaming import split_sentences
@@ -26,7 +27,14 @@ class VoiceSession:
 
     def run_once(self) -> None:
         self._on_event("listening", None)
-        captured = self._ptt.capture_utterance()
+        try:
+            captured = self._ptt.capture_utterance()
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            self._on_event("error", e)
+            time.sleep(0.5)  # avoid a tight error loop on a permanent device failure
+            return
         if captured is None:
             return
         audio, sample_rate = captured

@@ -116,6 +116,41 @@ def test_tts_failure_does_not_crash_session():
     session.run_once()  # must not raise, even though both reply-speak and recovery-speak fail
 
 
+def test_capture_error_does_not_crash_and_is_reported(monkeypatch):
+    from assistant.voice import session as session_module
+
+    monkeypatch.setattr(session_module.time, "sleep", lambda *_args, **_kwargs: None)
+
+    class BoomPTT:
+        def capture_utterance(self):
+            raise RuntimeError("device gone")
+
+    events = []
+    session = VoiceSession(
+        BoomPTT(),
+        FakeSTT("unused"),
+        FakeAgent("unused"),
+        FakeTTS(),
+        on_event=lambda name, payload: events.append((name, payload)),
+    )
+
+    session.run_once()  # must not raise
+
+    error_events = [e for e in events if e[0] == "error"]
+    assert len(error_events) == 1
+    assert isinstance(error_events[0][1], RuntimeError)
+    assert str(error_events[0][1]) == "device gone"
+
+
+def test_capture_keyboardinterrupt_still_propagates_via_run_forever():
+    class InterruptingPTT:
+        def capture_utterance(self):
+            raise KeyboardInterrupt
+
+    session = VoiceSession(InterruptingPTT(), FakeSTT("x"), FakeAgent("y"), FakeTTS())
+    session.run_forever()  # returns cleanly, does not hang or raise
+
+
 def test_stt_failure_is_spoken_not_raised():
     class BoomSTT:
         def transcribe(self, audio, sample_rate):
