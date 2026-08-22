@@ -9,6 +9,7 @@ from assistant.llm.client import LLMClient
 from assistant.security.confirm import ConfirmRequest
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
+from assistant.security.trust import SessionTrust
 from assistant.tools.apps import make_app_tools
 from assistant.tools.files import make_files_tools
 from assistant.tools.registry import ToolRegistry
@@ -26,8 +27,48 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         for tool in make_app_tools(MacAdapter(), roots):
             registry.register(tool)
         registry.register(make_shell_tool(roots))
+
+    trust = SessionTrust()
     log = ActionLog(cfg.log_path)
-    gate = PermissionGate(log, confirmer)
+    gate = PermissionGate(log, confirmer, trust=trust)
+
+    if cfg.enable_web:
+        try:
+            from assistant.tools.web import make_web_tools
+
+            for tool in make_web_tools():
+                registry.register(tool)
+        except Exception as e:
+            print(f"[web tools unavailable: {e}]")
+
+    if cfg.enable_apple and platform == "darwin":
+        try:
+            from assistant.tools.apple import make_apple_tools
+
+            for tool in make_apple_tools():
+                registry.register(tool)
+        except Exception as e:
+            print(f"[apple tools unavailable: {e}]")
+
+    if cfg.enable_m365 and cfg.m365_client_id:
+        try:
+            from assistant.tools.msgraph import GraphAuth, GraphClient, make_msgraph_tools
+
+            client = GraphClient(GraphAuth(cfg.m365_client_id))
+            for tool in make_msgraph_tools(client):
+                registry.register(tool)
+        except Exception as e:
+            print(f"[m365 tools unavailable: {e}]")
+
+    if cfg.mcp_servers:
+        try:
+            from assistant.tools.mcp_client import make_mcp_tools
+
+            for tool in make_mcp_tools(cfg.mcp_servers):
+                registry.register(tool)
+        except Exception as e:
+            print(f"[mcp tools unavailable: {e}]")
+
     return AgentLoop(
         LLMClient(cfg),
         registry,
@@ -36,6 +77,7 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         max_iterations=cfg.max_iterations,
         tool_result_max_chars=cfg.tool_result_max_chars,
         log=log,
+        trust=trust,
     )
 
 

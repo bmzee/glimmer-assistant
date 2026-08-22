@@ -20,6 +20,11 @@ class Config:
     voice_tts_voice: str = "af_heart"
     voice_hotkey: str = "ctrl"
     voice_min_utterance_seconds: float = 0.3
+    enable_web: bool = True
+    enable_apple: bool = True
+    enable_m365: bool = False
+    m365_client_id: str = ""
+    mcp_servers: list = field(default_factory=list)
 
 
 def load_config(path: str | Path | None = None) -> Config:
