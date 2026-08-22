@@ -48,21 +48,8 @@ class _Browser:
     def snapshot(self, url: str) -> str:
         page = self._page()
         page.goto(url, wait_until="domcontentloaded", timeout=30000)
-        tree = page.accessibility.snapshot() or {}
-        lines: list[str] = []
-
-        def walk(node, depth=0):
-            if depth > 25 or len(lines) > 800:
-                return
-            role = node.get("role", "")
-            name = (node.get("name") or "").strip()
-            if name and role not in ("generic", "none", ""):
-                lines.append(f'{role} "{name}"')
-            for child in node.get("children", []) or []:
-                walk(child, depth + 1)
-
-        walk(tree)
-        return "\n".join(lines) or "(no accessible content)"
+        text = page.locator("body").aria_snapshot()
+        return text or "(no accessible content)"
 
     def close(self) -> None:
         if self._context is not None:

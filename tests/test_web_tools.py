@@ -1,3 +1,7 @@
+from unittest.mock import create_autospec
+
+import pytest
+
 from assistant.tools.registry import RiskTier
 from assistant.tools.web import make_web_tools
 
@@ -65,3 +69,38 @@ def test_browser_errors_become_error_strings():
 
     tools = by_name(make_web_tools(browser=BoomBrowser()))
     assert tools["read_page"].func({"url": "https://example.com"}).startswith("ERROR:")
+
+
+def test_snapshot_uses_api_present_on_installed_playwright_page():
+    # Autospec fences the fakes to the real installed Playwright surface, so a
+    # snapshot() built on an API that upstream has removed fails here rather
+    # than only in the (network-bound) integration test.
+    sync_api = pytest.importorskip("playwright.sync_api")
+    from assistant.tools.web import _Browser
+
+    page = create_autospec(sync_api.Page, instance=True)
+    locator = create_autospec(sync_api.Locator, instance=True)
+    page.locator.return_value = locator
+    locator.aria_snapshot.return_value = (
+        '- heading "Example Domain" [level=1]\n'
+        "- paragraph: This domain is for illustrative examples."
+    )
+    context = create_autospec(sync_api.BrowserContext, instance=True)
+    context.pages = [page]
+
+    browser = _Browser()
+    browser._context = context
+    out = browser.snapshot("https://example.com")
+
+    assert page.goto.call_args[0][0] == "https://example.com"
+    assert "Example Domain" in out
+    assert "illustrative examples" in out
+
+
+def test_open_url_rejects_non_http_schemes():
+    fake = FakeBrowser()
+    tools = by_name(make_web_tools(browser=fake))
+    for bad in ["file:///etc/passwd", "javascript:alert(1)", "data:text/html,x"]:
+        out = tools["open_url"].func({"url": bad})
+        assert out.startswith("ERROR:")
+    assert fake.visited == []  # never navigated
