@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class SpeechToText(Protocol):
-    def transcribe(self, audio: "np.ndarray", sample_rate: int) -> str: ...
+    def transcribe(self, audio: np.ndarray, sample_rate: int) -> str: ...
 
 
 @runtime_checkable
@@ -18,4 +18,4 @@ class TextToSpeech(Protocol):
 
 @runtime_checkable
 class PushToTalk(Protocol):
-    def capture_utterance(self) -> "tuple[np.ndarray, int] | None": ...
+    def capture_utterance(self) -> tuple[np.ndarray, int] | None: ...
