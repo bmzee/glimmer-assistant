@@ -31,6 +31,7 @@ EXPECTED_UNTRUSTED = {
     "m365_read_mail",
     "m365_list_events",
     "run_shell",           # sandbox allows file-read unconditionally; stdout may contain untrusted content
+    "list_windows",        # a browser window title IS the page title (attacker-controlled)
 }
 
 # Tools that can transmit data off the machine or change external state.
@@ -54,6 +55,7 @@ MUST_NOT_BE_AUTO = {
     "m365_send_mail",
     "m365_create_event",
     "run_shell",
+    "quit_app",            # no Tier-1 undo window exists; unsaved work is unrecoverable
 }
 
 
@@ -117,7 +119,12 @@ def test_every_registered_tool_is_classified(tmp_path):
     as neither), so nobody ships an unclassified capability by accident."""
     tools = all_tools(tmp_path)
     # Tools that legitimately neither return external content nor transmit.
-    NEITHER = {"list_dir", "open_app", "open_path"}
+    NEITHER = {
+        "list_dir", "open_app", "open_path",
+        # System control: mutate local state only, return no external content.
+        "quit_app", "focus_window", "set_volume",
+        "screenshot",  # returns the saved path, not image content
+    }
     classified = EXPECTED_UNTRUSTED | EXPECTED_OUTBOUND | NEITHER
     unclassified = sorted(set(tools) - classified)
     assert not unclassified, (

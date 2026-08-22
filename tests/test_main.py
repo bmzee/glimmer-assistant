@@ -11,7 +11,11 @@ def test_build_loop_darwin_registers_expected_tools(tmp_path):
     )
     loop = build_loop(cfg, confirmer=lambda req: False, platform="darwin")
     names = {t.name for t in loop._registry.available("darwin")}
-    assert names == {"list_dir", "read_file", "open_app", "open_path", "run_shell"}
+    assert names == {
+        "list_dir", "read_file", "open_app", "open_path", "run_shell",
+        # System-control tools closing the spec SS7 PlatformAdapter gap.
+        "quit_app", "list_windows", "focus_window", "set_volume", "screenshot",
+    }
 
 
 def test_build_loop_win32_gets_cross_platform_tools_only(tmp_path):

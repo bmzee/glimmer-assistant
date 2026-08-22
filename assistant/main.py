@@ -23,8 +23,12 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
     if platform == "darwin":
         from assistant.tools.adapters.mac import MacAdapter
         from assistant.tools.shell import make_shell_tool
+        from assistant.tools.system import make_system_tools
 
-        for tool in make_app_tools(MacAdapter(), roots):
+        adapter = MacAdapter()
+        for tool in make_app_tools(adapter, roots):
+            registry.register(tool)
+        for tool in make_system_tools(adapter, roots):
             registry.register(tool)
         registry.register(make_shell_tool(roots))
 
