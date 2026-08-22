@@ -39,11 +39,6 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
     )
 
 
-def _voice_declines(request) -> bool:
-    # Tier-2 CONFIRM tools cannot be confirmed by voice in Plan 3; decline safely.
-    return False
-
-
 def cli_confirm(request) -> bool:
     return input(f"ALLOW? {request.preview} [y/N] ").strip().lower() == "y"
 
@@ -60,7 +55,6 @@ def _voice_event_printer(name, payload):
 def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
     from assistant.voice.session import VoiceSession
 
-    loop = build_loop(cfg, _voice_declines, platform)
     if stt is None:
         from assistant.voice.stt import ParakeetSTT
 
@@ -72,7 +66,14 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
     if ptt is None:
         from assistant.voice.audio import HotkeyPushToTalk
 
-        ptt = HotkeyPushToTalk(cfg.voice_hotkey, min_seconds=cfg.voice_min_utterance_seconds)
+        ptt = HotkeyPushToTalk(
+            cfg.voice_hotkey, min_seconds=cfg.voice_min_utterance_seconds
+        )
+
+    from assistant.voice.confirm import SpokenConfirmer
+
+    confirmer = SpokenConfirmer(ptt, stt, tts)
+    loop = build_loop(cfg, confirmer, platform)
     return VoiceSession(
         ptt,
         stt,
