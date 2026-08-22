@@ -85,10 +85,12 @@ class AgentLoop:
         try:
             result = tool.func(args)
             if tool.untrusted:
-                result = datamark(result, tool.name)
+                result = datamark(self._truncate(result), tool.name)
                 if self._trust is not None:
                     self._trust.note_untrusted_ingest(tool.name)
-            output = self._truncate(result)
+                output = result
+            else:
+                output = self._truncate(result)
             status = "ok"
         except Exception as e:  # tool bugs must not kill the loop; the model retries
             output = f"ERROR: {e}"

@@ -236,6 +236,43 @@ def test_post_execution_result_is_logged(tmp_path):
     assert rec["result_sha256"] == hashlib.sha256(b"the-result").hexdigest()
 
 
+def test_untrusted_result_over_cap_still_closes_the_envelope(tmp_path):
+    # IMPORTANT-3: datamark-then-truncate ordering. If truncation happened
+    # after datamarking, a long untrusted result would cut off the closing
+    # </untrusted id=...> marker, leaving the quarantine block unterminated
+    # and contradicting the envelope's own instruction that only the
+    # matching marker ends the block.
+    reg = ToolRegistry()
+    reg.register(
+        Tool(
+            name="fetch",
+            description="d",
+            parameters={"type": "object", "properties": {}, "required": []},
+            risk_tier=RiskTier.AUTO,
+            platforms=("darwin",),
+            func=lambda a: "x" * 500,
+            untrusted=True,
+        )
+    )
+    llm = FakeLLM(
+        [
+            assistant_msg(tool_calls=[tool_call("c1", "fetch", {})]),
+            assistant_msg(content="done"),
+        ]
+    )
+    loop = make_loop(tmp_path, llm, reg, tool_result_max_chars=50)
+    loop.run("go")
+    tool_msgs = [m for m in llm.seen_messages[1] if m["role"] == "tool"]
+    content = tool_msgs[0]["content"]
+
+    assert content.startswith('<untrusted id="')
+    nonce = content.split('id="', 1)[1].split('"', 1)[0]
+    # the quoted id="<nonce>" appears exactly twice: opening tag and closing tag
+    assert content.count(f'id="{nonce}"') == 2
+    assert content.rstrip().endswith(f'</untrusted id="{nonce}">')
+    assert "[truncated]" in content
+
+
 def test_untrusted_tool_marks_session_trust(tmp_path):
     from assistant.security.trust import SessionTrust
     from assistant.tools.registry import RiskTier, Tool, ToolRegistry
