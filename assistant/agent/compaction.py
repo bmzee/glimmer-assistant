@@ -37,6 +37,15 @@ def _describe(messages: list[dict]) -> str:
     return ". ".join(parts) + "."
 
 
+def _safe_tail_start(messages: list[dict], naive_start: int, floor: int) -> int:
+    """Never start the tail on a tool message — its parent assistant message
+    (carrying the matching tool_call_id) must travel with it."""
+    start = naive_start
+    while start > floor and messages[start].get("role") == "tool":
+        start -= 1
+    return start
+
+
 def compact(messages: list[dict], keep_recent: int = 6) -> list[dict]:
     """Anchored compaction: keep the system message and the recent tail verbatim,
     replace the middle with one structural summary. Deterministic and offline —
@@ -44,8 +53,14 @@ def compact(messages: list[dict], keep_recent: int = 6) -> list[dict]:
     if not messages:
         return messages
     head = messages[:1] if messages[0].get("role") == "system" else []
-    tail = messages[len(messages) - keep_recent :] if keep_recent else []
-    middle = messages[len(head) : len(messages) - len(tail)]
+
+    # Compute the naive tail start position, then adjust for tool-message boundaries
+    naive_start = len(messages) - keep_recent if keep_recent else len(messages)
+    naive_start = max(naive_start, len(head))
+    safe_start = _safe_tail_start(messages, naive_start, len(head))
+
+    tail = messages[safe_start:] if safe_start < len(messages) else []
+    middle = messages[len(head) : safe_start]
     if len(middle) <= 1:
         return messages
     return [*head, {"role": "user", "content": _describe(middle)}, *tail]

@@ -304,6 +304,8 @@ def test_untrusted_tool_marks_session_trust(tmp_path):
 
 
 def test_loop_compacts_when_context_grows(tmp_path):
+    """Compaction must preserve tool-call/tool-result pairing invariant:
+    every tool message must have its parent assistant message in the output."""
     # Accumulate messages through tool calls to trigger compaction
     llm = FakeLLM([
         assistant_msg(tool_calls=[tool_call("c1", "echo", {}), tool_call("c2", "echo", {})]),
@@ -317,9 +319,31 @@ def test_loop_compacts_when_context_grows(tmp_path):
         context_max_tokens=200, compact_threshold=0.65,  # tiny -> forces compaction
     )
     loop.run("x" * 800)
+
     # After accumulating messages through tool calls, compaction should happen
-    # Check that at least one of the message lists sent to LLM has a summary
+    compaction_found = False
     for sent in llm.seen_messages:
         if any("summarized" in str(m.get("content", "")) for m in sent):
-            return  # Compaction happened
-    assert False, "Expected compaction to occur when context grows"
+            compaction_found = True
+
+    assert compaction_found, "Expected compaction to occur when context grows"
+
+    # CRITICAL: Verify pairing invariant on EVERY message list sent to LLM
+    # Every tool message must be preceded by an assistant message with matching tool_calls
+    for call_index, sent in enumerate(llm.seen_messages):
+        for msg_index, m in enumerate(sent):
+            if m.get("role") == "tool":
+                tool_call_id = m["tool_call_id"]
+                # Find parent: any earlier message with role=assistant and matching tool_calls
+                parent_found = any(
+                    sent[j].get("role") == "assistant" and any(
+                        c.get("id") == tool_call_id
+                        for c in sent[j].get("tool_calls", [])
+                    )
+                    for j in range(msg_index)
+                )
+                assert parent_found, (
+                    f"LLM call #{call_index}, msg #{msg_index}: "
+                    f"tool_call_id '{tool_call_id}' has no preceding "
+                    f"assistant message with matching tool_calls entry"
+                )
