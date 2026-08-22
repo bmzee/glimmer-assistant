@@ -79,3 +79,60 @@ def test_no_utterance_fails_closed():
 
     confirmer = SpokenConfirmer(SilentPTT(), ScriptedSTT([]), RecordingTTS())
     assert confirmer(request()) is False
+
+
+# Regression test for security bug: word-boundary matching prevents false approvals
+import pytest
+
+
+@pytest.mark.parametrize("denial_phrase", [
+    "disapprove",
+    "i disapprove",
+    "never confirm this",
+    "won't approve",
+    "unapproved",
+    "no",
+    "no thanks",
+    "nope",
+    "cancel",
+    "stop",
+    "do not send it",
+    "don't",
+    "negative",
+    "not now",
+])
+def test_refusals_are_never_approved(denial_phrase):
+    """Explicit refusals must return False, not accidentally match YES substring."""
+    confirmer = SpokenConfirmer(ScriptedPTT(), ScriptedSTT([denial_phrase]), RecordingTTS())
+    assert confirmer(request()) is False, f"'{denial_phrase}' should not be approved"
+
+
+@pytest.mark.parametrize("approval_phrase", [
+    "yes",
+    "yes please",
+    "yeah",
+    "yep",
+    "approve",
+    "confirm",
+    "do it",
+    "go ahead",
+    "okay",
+])
+def test_approvals_require_whole_words(approval_phrase):
+    """Approval phrases must match as whole words."""
+    confirmer = SpokenConfirmer(ScriptedPTT(), ScriptedSTT([approval_phrase]), RecordingTTS())
+    assert confirmer(request()) is True, f"'{approval_phrase}' should be approved"
+
+
+@pytest.mark.parametrize("unclear_phrase", [
+    "yesterday",  # contains "yes" but not as whole word
+    "hmm",
+    "i know",  # contains "no" but not as whole word
+    "what",
+])
+def test_unclear_phrases_deny_after_attempts(unclear_phrase):
+    """Phrases that don't match yes/no/negations should retry and deny after attempts exhausted."""
+    confirmer = SpokenConfirmer(
+        ScriptedPTT(), ScriptedSTT([unclear_phrase, unclear_phrase]), RecordingTTS(), attempts=2
+    )
+    assert confirmer(request()) is False, f"'{unclear_phrase}' should be treated as unclear and denied"
