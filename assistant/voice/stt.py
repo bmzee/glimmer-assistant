@@ -13,9 +13,12 @@ class ParakeetSTT:
         self._model = model
 
     def transcribe(self, audio, sample_rate: int) -> str:
+        import os
         import soundfile
 
-        tmp = Path(tempfile.mkstemp(suffix=".wav", prefix="glimmer-stt-")[1])
+        fd, path = tempfile.mkstemp(suffix=".wav", prefix="glimmer-stt-")
+        os.close(fd)  # mkstemp hands back an open fd; close it, we only need the path
+        tmp = Path(path)
         try:
             soundfile.write(str(tmp), audio, sample_rate)
             result = self._model.transcribe(str(tmp))
