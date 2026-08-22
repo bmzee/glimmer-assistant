@@ -15,14 +15,22 @@ automated session does not have.
 investigated and are real, reproducible issues — not flukes and not the "expected" TCC block.
 They are reported here as found, not smoothed over. See §1 and §5.
 
+**Update (final fix wave, same day):** both real bugs found by this live-testing session — the
+removed Playwright `accessibility` API (§1.3) and the calendar-read timeout (§1.2) — have since
+been fixed and re-verified against the real browser and real Calendar.app. See §1.2.1 and
+§1.3.1 for the fixes and the now-passing integration output. The rest of this document is left
+as originally written (including the "FAIL" language in the sections below) so the record of
+what live testing actually found is not smoothed over; the Summary table below reflects the
+final, post-fix state.
+
 ## Summary
 
 | Check | Result |
 |---|---|
-| Full unit suite (`pytest -q`, no integration env) | **PASS** — 173 passed, 5 skipped |
-| Apple Calendar integration test | **FAIL** — real AppleScript timeout (30s cap vs. ~102s actual), not a permissions problem; see §1.2 |
+| Full unit suite (`pytest -q`, no integration env) | **PASS** — 182 passed, 5 skipped |
+| Apple Calendar integration test | **FIXED, now PASSES** — originally failed on a real AppleScript timeout (30s cap vs. ~60-102s actual measured across two sessions), not a permissions problem; see §1.2 and §1.2.1 |
 | Apple Mail integration test | **PASS** — correctly reports the expected TCC `-1743` remediation string |
-| Web (real Chromium) integration test | **FAIL** — `Page.accessibility` API removed in the installed Playwright (1.62.0); real code/dependency incompatibility, see §1.3 |
+| Web (real Chromium) integration test | **FIXED, now PASSES** — originally failed because `Page.accessibility` was removed in the installed Playwright (1.62.0); see §1.3 and §1.3.1 |
 | Voice integration tests (`test_stt_integration`, `test_tts_integration`) | **SKIPPED** — gated behind a different env var, `GLIMMER_VOICE_INTEGRATION=1`, not exercised by this task |
 | Rule-of-Two end-to-end elevation demo | **PASS** — all 3 turns and all assertions passed against the real gate/trust/log/loop wiring; see §2 |
 | M365 live path | **NOT RUN** — `enable_m365` defaults `False`, no client id configured, no credentials available to this session |
@@ -96,6 +104,40 @@ the timeout for this specific call or rewrite the filter to avoid the AppleScrip
 clause), not a flake and not something fixed by user permission grants. No code was modified in
 this task per its constraints; this is reported as found.
 
+#### 1.2.1 Resolution (final fix wave, same day)
+
+Fixed in `assistant/tools/apple.py`: `_default_runner`/`_run` now accept an optional
+`timeout=` (still defaulting to 30s for every other Apple tool call, so a genuinely stuck Mail
+call still fails fast), threaded via a small `inspect.signature` check so runners that don't
+accept a `timeout` kwarg (including every existing test's fake runner) are unaffected.
+`list_calendar_events` now requests `timeout=120`, comfortably above the ~60-102s measured
+worst case. A new optional `calendar_name` parameter was also added so a caller who knows which
+calendar they want can skip the slow all-calendars `whose` loop entirely (query a single
+`calendar "<name>"` instead of `repeat with cal in calendars`); omitting it keeps the
+correct-but-slow all-calendars search, which now has enough time to actually finish. The
+parameter is escaped with the existing `_esc()` helper, same as every other AppleScript string
+argument in this file.
+
+Five new unit tests (fake runner) cover: `calendar_name` produces a single-calendar script and
+omits the all-calendars loop; omitting it keeps the all-calendars loop; a `calendar_name`
+containing a quote is escaped; the calendar read specifically requests `timeout=120`; other
+Apple calls do not request the extended timeout.
+
+Re-running the real integration test:
+
+```
+GLIMMER_INTEGRATION=1 .venv/bin/python -m pytest -m integration -k calendar -v
+
+tests/test_apple_integration.py::test_real_calendar_listing_does_not_error PASSED [100%]
+================= 1 passed, 184 deselected in 97.88s (0:01:37) =================
+```
+
+97.88s, comfortably inside the new 120s budget (this test exercises the slow all-calendars path
+deliberately, since it doesn't know a calendar name up front). Per the repo's public-redaction
+requirement, no real event titles are reproduced here — the test only asserts the call did not
+return an ERROR string, it does not assert on event content ((events returned; titles
+redacted)).
+
 ### 1.3 Second run — Web (real Chromium)
 
 ```
@@ -123,6 +165,45 @@ bug worth a follow-up fix (Playwright's replacement is the ARIA snapshot API, e.
 `page.locator("body").aria_snapshot()`, or pinning to a Playwright version that still has
 `page.accessibility`). No code was modified in this task per its constraints; this is reported
 as found.
+
+#### 1.3.1 Resolution (final fix wave, same day)
+
+Fixed in `assistant/tools/web.py`: `_Browser.snapshot` now uses
+`page.locator("body").aria_snapshot()`, replacing the removed accessibility-tree walk (and the
+now-dead `walk()` recursion helper and its depth/line caps, which existed only to bound that
+walk). `aria_snapshot` has shipped since Playwright 1.49, so the existing `playwright>=1.60`
+floor already covers it and no version pin was needed. The returned text is strictly richer
+than before — the old walker emitted only `role "name"` and dropped link targets, while the
+ARIA snapshot includes paragraph text and `/url:` entries, which `search_web` ("result titles
+and links") depends on.
+
+`tests/test_web_integration.py` needed no code change and now passes against real Chromium. A
+unit regression test was added to `tests/test_web_tools.py` that drives `snapshot()` against
+`create_autospec` fakes of the real installed `Page`/`Locator`/`BrowserContext`, so a future
+upstream API removal fails in the default (network-free) suite instead of only in the opt-in
+integration test. (An earlier draft of this fix also reintroduced a depth/line cap and a test
+pinning it; that was dropped — the brief for this fix explicitly calls for removing the caps
+entirely, and 1.62's `aria_snapshot()` has its own `depth`/`timeout` parameters if bounding is
+ever needed again.) The existing `FakeBrowser`-based tests needed no changes and still pass.
+
+Real output against `https://example.com` (`_Browser.snapshot`, this session):
+
+```
+- heading "Example Domain" [level=1]
+- paragraph: This domain is for use in documentation examples without needing permission. Avoid use in operations.
+- paragraph:
+  - link "Learn more":
+    - /url: https://iana.org/domains/example
+```
+
+Re-running the real integration test:
+
+```
+GLIMMER_INTEGRATION=1 .venv/bin/python -m pytest -m integration -k web -v
+
+tests/test_web_integration.py::test_real_browser_reads_example_com PASSED [100%]
+====================== 1 passed, 179 deselected in 0.63s =======================
+```
 
 ### 1.4 Mail (unaffected by the above, passed both runs)
 
@@ -245,7 +326,7 @@ not something the model can be talked out of via its own tool-call arguments.
 | Module | Tools | Notes |
 |---|---|---|
 | `assistant.tools.web` (`make_web_tools`) | `open_url` (UNDO), `read_page` (AUTO, `untrusted=True`), `search_web` (AUTO, `untrusted=True`) | Backed by a lazy, persistent-profile Playwright Chromium context; URL scheme allowlisted to http/https. |
-| `assistant.tools.apple` (`make_apple_tools`) | `list_calendar_events` (AUTO), `create_calendar_event` (CONFIRM), `list_recent_mail` (AUTO, `untrusted=True`), `read_mail_message` (AUTO, `untrusted=True`), `draft_mail` (UNDO), `send_mail` (CONFIRM, `outbound=True`) | AppleScript via `osascript`; string arguments escaped (`_esc`) against injection. |
+| `assistant.tools.apple` (`make_apple_tools`) | `list_calendar_events` (AUTO; optional `calendar_name` for a fast single-calendar query, 120s timeout), `create_calendar_event` (CONFIRM), `list_recent_mail` (AUTO, `untrusted=True`), `read_mail_message` (AUTO, `untrusted=True`), `draft_mail` (UNDO), `send_mail` (CONFIRM, `outbound=True`) | AppleScript via `osascript`; string arguments escaped (`_esc`) against injection. |
 | `assistant.tools.msgraph` (`make_m365_tools`) | `m365_list_mail`, `m365_read_mail`, `m365_send_mail`, `m365_list_events`, `m365_create_event` | 5 tools; device-code OAuth via `msal`; requires `enable_m365: true` + `m365_client_id` in config. Not exercised live this session (see §4.2). |
 | `assistant.tools.mcp_client` (`make_mcp_tools`) | Dynamic, per configured `MCPServerSpec` | Third-party MCP servers; tool set is whatever the server advertises. Conservative defaults; a dead/misconfigured server degrades the tool set rather than crashing the assistant. `mcp` package is an optional extra (`pip install -e '.[mcp]'`) — **not installed in this venv**, so no live server was exercised this session. |
 
@@ -304,13 +385,14 @@ Requires microphone and Accessibility permissions this automated session does no
   session (§4.3). Already partly covered non-live by Plan 3's smoke test
   (`docs/smoke-test-plan3.md`) for the STT/TTS pipeline itself; the *spoken confirmation* UX
   specifically has not been exercised end to end with a live voice session in any plan to date.
-- **Apple Calendar integration test** — ran, but **failed** on a real 30-second timeout against
-  a genuinely slow AppleScript query (§1.2). This is a bug/limitation to fix, not a permissions
-  gap; Calendar automation access itself is confirmed working.
-- **Web integration test** — ran, but **failed** on a real Playwright API removal
-  (`Page.accessibility`, §1.3). This is a dependency/code compatibility bug to fix, not an
-  environment or network problem; Chromium itself launches and navigates correctly after
-  installing the matching browser build.
+- **Apple Calendar integration test** — originally **failed** on a real 30-second timeout
+  against a genuinely slow AppleScript query (§1.2), not a permissions gap; Calendar automation
+  access itself was confirmed working throughout. **This has since been fixed (extended timeout
+  + optional `calendar_name` fast path) and the test now passes — see §1.2.1.**
+- **Web integration test** — originally **failed** on a real Playwright API removal
+  (`Page.accessibility`, §1.3), not an environment or network problem; Chromium itself launched
+  and navigated correctly after installing the matching browser build. **This has since been
+  fixed (switched to `aria_snapshot()`) and the test now passes — see §1.3.1.**
 - **Redaction** — the Calendar integration test's manual re-run returned real event data from
   this machine's calendar; it is summarized above as "(N events returned; titles redacted)" and
   no real event titles, mail senders/subjects, usernames, or absolute `/Users/<name>/` paths
@@ -322,10 +404,14 @@ Plan 4's core security invariant — Rule-of-Two outbound elevation once untrust
 been ingested — is proven end to end against the real `SessionTrust`/`PermissionGate`/
 `ActionLog`/`AgentLoop` code path, with audit-log evidence showing the exact before/after
 (unconfirmed `auto` send → untrusted ingest → confirmed-and-`elevated` send). The unit suite
-(173 tests) passes cleanly. Of the five opt-in integration tests, Mail correctly reports its
-expected TCC block, and Calendar and Web both surfaced real, reproducible bugs during this
-session (an AppleScript timeout and a removed Playwright API, respectively) that are documented
-above rather than hidden — they are not covered by this task's mandate to fix ("do not modify
-code") and are flagged here as follow-up work. The remaining live paths (Mail with Automation
-granted, M365 device-code sign-in, and live voice Tier-2 confirmation) require user-held
-permissions or credentials and are left as the manual checklist in §4.
+(182 tests) passes cleanly. Of the five opt-in integration tests, Mail correctly reports its
+expected TCC block, and Calendar and Web both surfaced real, reproducible bugs during the
+original live-testing session (an AppleScript timeout and a removed Playwright API,
+respectively) — the classic fake-vs-reality gap: both were invisible to the unit suite because
+it injects fakes (`FakeRunner`, `FakeBrowser`) that never exercise the real `osascript`
+subprocess timeout or the real installed Playwright surface. Both bugs were fixed and
+re-verified against the real browser and real Calendar.app in the same-day final fix wave (see
+§1.2.1 and §1.3.1); all five opt-in integration tests now pass or correctly skip (voice, gated
+behind a separate env var). The remaining live paths (Mail with Automation granted, M365
+device-code sign-in, and live voice Tier-2 confirmation) require user-held permissions or
+credentials and are left as the manual checklist in §4.
