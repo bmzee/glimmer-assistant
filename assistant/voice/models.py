@@ -9,8 +9,12 @@ _FILES = ("kokoro-v1.0.onnx", "voices-v1.0.bin")
 
 
 def _download(url: str, dest: Path) -> None:
+    import os
+
     dest.parent.mkdir(parents=True, exist_ok=True)
-    urllib.request.urlretrieve(url, dest)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    urllib.request.urlretrieve(url, tmp)
+    os.replace(tmp, dest)
 
 
 def ensure_kokoro_models() -> tuple[Path, Path]:
