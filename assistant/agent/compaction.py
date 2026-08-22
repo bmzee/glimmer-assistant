@@ -39,9 +39,12 @@ def _describe(messages: list[dict]) -> str:
 
 def _safe_tail_start(messages: list[dict], naive_start: int, floor: int) -> int:
     """Never start the tail on a tool message — its parent assistant message
-    (carrying the matching tool_call_id) must travel with it."""
-    start = naive_start
-    while start > floor and messages[start].get("role") == "tool":
+    (carrying the matching tool_call_id) must travel with it. Returns start index
+    clamped to [floor, len(messages))."""
+    # Guard against out-of-range indices
+    start = max(floor, min(naive_start, len(messages) - 1)) if len(messages) > floor else floor
+    # Walk backward if we're on a tool message
+    while start > floor and start < len(messages) and messages[start].get("role") == "tool":
         start -= 1
     return start
 
@@ -52,6 +55,10 @@ def compact(messages: list[dict], keep_recent: int = 6) -> list[dict]:
     it never calls the model, so it cannot fail or cost a round-trip."""
     if not messages:
         return messages
+
+    # Defensive clamping: keep_recent must be in valid range
+    keep_recent = max(0, min(keep_recent, len(messages)))
+
     head = messages[:1] if messages[0].get("role") == "system" else []
 
     # Compute the naive tail start position, then adjust for tool-message boundaries

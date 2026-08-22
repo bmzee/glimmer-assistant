@@ -163,3 +163,29 @@ def test_parallel_tool_calls_not_orphaned():
             for m in out
         )
         assert parent_found, f"parallel call {tool_id} orphaned from parent"
+
+
+def test_compact_with_keep_recent_zero():
+    """Edge case: keep_recent=0 must not raise, handle defensively."""
+    messages = [msg("system", "S"), msg("user", "q"), msg("assistant", "a")]
+    # Should not raise IndexError
+    out = compact(messages, keep_recent=0)
+    assert isinstance(out, list)
+
+
+def test_compact_with_keep_recent_larger_than_list():
+    """Edge case: keep_recent larger than message count must not raise."""
+    messages = [msg("system", "S"), msg("user", "q")]
+    # Should not raise IndexError
+    out = compact(messages, keep_recent=999)
+    assert isinstance(out, list)
+    # With keep_recent > len, all fit in recent, no compaction
+    assert out == messages
+
+
+def test_compact_with_negative_keep_recent():
+    """Edge case: negative keep_recent must be clamped defensively."""
+    messages = [msg("system", "S"), msg("user", "q"), msg("assistant", "a")]
+    # Should not raise; negative gets clamped to 0
+    out = compact(messages, keep_recent=-5)
+    assert isinstance(out, list)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from assistant.agent.compaction import compact, estimate_tokens, should_compact
+from assistant.agent.compaction import compact, should_compact
 from assistant.agent.prompts import SYSTEM_PROMPT
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
@@ -46,12 +46,12 @@ class AgentLoop:
 
         for _ in range(self._max_iterations):
             if should_compact(messages, self._context_max_tokens, self._compact_threshold):
-                # When under pressure, reduce keep_recent to ensure effective compaction
-                pressure = estimate_tokens(messages) / self._context_max_tokens
-                # If significantly over threshold, use aggressive keep_recent (2);
-                # otherwise use default (6)
-                keep_recent = 2 if pressure > 1.0 else 6
-                messages = compact(messages, keep_recent=keep_recent)
+                # Escalate keep_recent only as far as needed to drop below threshold
+                for keep in (6, 4, 2):
+                    candidate = compact(messages, keep_recent=keep)
+                    messages = candidate
+                    if not should_compact(candidate, self._context_max_tokens, self._compact_threshold):
+                        break
                 self._on_compact()
             msg = self._llm.chat(messages, schemas)
             if not getattr(msg, "tool_calls", None):
