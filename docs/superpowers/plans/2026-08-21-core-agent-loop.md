@@ -19,7 +19,7 @@
 
 ## Global Constraints
 
-- Python ≥ 3.12; package name `assistant`; project root `/Users/bmz/development/perso/glimmer-assistant`.
+- Python ≥ 3.12; package name `assistant`; project root is the repository root.
 - Runtime dependencies limited to: `openai>=1.50`, `pyyaml>=6.0`. Dev: `pytest>=8.0`. Nothing else without a spec change.
 - Tests never hit the network or a real LLM; LLM interactions are tested with fakes.
 - Tests never mutate real user files; all filesystem tests use pytest `tmp_path`.
