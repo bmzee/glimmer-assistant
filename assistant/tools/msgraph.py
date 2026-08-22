@@ -142,8 +142,8 @@ def make_msgraph_tools(client) -> list[Tool]:
         start = datetime.datetime.now(datetime.UTC)
         end = start + datetime.timedelta(days=days)
         path = (
-            f"/me/calendarview?startDateTime={start.isoformat()}"
-            f"&endDateTime={end.isoformat()}&$select=subject,start,end"
+            f"/me/calendarview?startDateTime={quote(start.isoformat(), safe='')}"
+            f"&endDateTime={quote(end.isoformat(), safe='')}&$select=subject,start,end"
         )
         try:
             data = client.get(path)

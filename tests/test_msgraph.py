@@ -1,7 +1,9 @@
+import datetime
 import json
 import os
 import stat
 from unittest.mock import MagicMock
+from urllib.parse import parse_qs, urlparse
 
 from assistant.tools.msgraph import GraphAuth, GraphClient, make_msgraph_tools
 from assistant.tools.registry import RiskTier
@@ -74,6 +76,34 @@ def test_send_mail_is_confirm_outbound_and_posts():
     assert "/me/sendMail" in call["url"]
     payload = json.loads(call["body"])
     assert payload["message"]["toRecipients"][0]["emailAddress"]["address"] == "a@b.com"
+
+
+def test_list_events_url_encodes_the_plus_in_utc_offset():
+    """IMPORTANT-6: datetime.isoformat() on a UTC-aware datetime emits a
+    literal '+00:00'. Left unencoded in a query string, '+' form-decodes to
+    a space and Graph rejects the DateTimeOffset. Percent-encoding it must
+    round-trip cleanly through real URL parsing."""
+    http = FakeHTTP({"value": []})
+    tools = by_name(make_msgraph_tools(GraphClient(FakeAuth(), http=http)))
+
+    tools["m365_list_events"].func({"days_ahead": 3})
+
+    call = http.calls[0]
+    parsed = urlparse(call["url"])
+    qs = parse_qs(parsed.query)
+
+    start_raw = qs["startDateTime"][0]
+    end_raw = qs["endDateTime"][0]
+
+    # the '+' must have survived as '+', never decoded into a stray space
+    assert " " not in start_raw
+    assert " " not in end_raw
+    assert "+00:00" in start_raw
+    assert "+00:00" in end_raw
+
+    start_dt = datetime.datetime.fromisoformat(start_raw)
+    end_dt = datetime.datetime.fromisoformat(end_raw)
+    assert (end_dt - start_dt) == datetime.timedelta(days=3)
 
 
 def test_graph_errors_become_error_strings():
