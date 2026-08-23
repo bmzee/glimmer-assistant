@@ -1,6 +1,27 @@
-# Choosing the push-to-talk key
+# Voice activation: key and mode
 
-**Default: `alt_r` — Right Option.** Hold it, speak, release.
+**Default: double-tap Right Option.** Tap it twice to start listening, speak for
+as long as you like, tap twice again to stop.
+
+Holding a key for the length of a request is uncomfortable past a sentence and
+competes with typing on a laptop, so the toggle is the default. Classic
+push-to-talk is still available:
+
+```yaml
+voice_activation: hold      # hold the key while speaking
+```
+
+A toggle has one failure mode push-to-talk does not: **it can be left on.**
+Push-to-talk ends when you let go; a toggle ends only when you remember it. So a
+session stops itself after `voice_max_session_seconds` (default 120) rather than
+recording until something breaks.
+
+Two taps count as a double-tap when they land within
+`voice_tap_window_seconds` (default 0.4). A lone tap does nothing, so a stray
+press cannot open the microphone. Tapping three times still works — the
+detector rearms on each tap rather than discarding the pair.
+
+## Choosing the key
 
 The original default was `ctrl`, which was a bad choice made before there was
 anything to test it against: Ctrl is a modifier you press constantly for

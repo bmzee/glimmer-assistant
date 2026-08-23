@@ -36,6 +36,14 @@ class Config:
     # activation delay. See docs/voice-hotkey.md.
     voice_hotkey: str = "alt_r"
     voice_min_utterance_seconds: float = 0.3
+    # "double_tap": tap twice to start listening, twice again to stop -- hands
+    # free, and comfortable for anything longer than a sentence.
+    # "hold": classic push-to-talk, hold the key while speaking.
+    voice_activation: str = "double_tap"
+    voice_tap_window_seconds: float = 0.4
+    # A toggle can be left on in a way push-to-talk cannot, so a forgotten
+    # session stops itself rather than recording indefinitely.
+    voice_max_session_seconds: float = 120.0
     enable_web: bool = True
     enable_apple: bool = True
     enable_m365: bool = False
@@ -99,6 +107,9 @@ _TEMPLATE = """\
 
 # Push-to-talk key, and the shortest utterance treated as speech.
 # voice_hotkey: alt_r        # right Option; see docs/voice-hotkey.md for alternatives
+# voice_activation: double_tap   # or 'hold' for classic push-to-talk
+# voice_tap_window_seconds: 0.4
+# voice_max_session_seconds: 120.0
 # voice_min_utterance_seconds: 0.3
 
 # Suppresses the model's hidden reasoning tokens. Faster to first word, but

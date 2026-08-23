@@ -123,11 +123,19 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
 
         tts = KokoroTTS(cfg.voice_tts_voice)
     if ptt is None:
-        from assistant.voice.audio import HotkeyPushToTalk
+        from assistant.voice.audio import DoubleTapToggle, HotkeyPushToTalk
 
-        ptt = HotkeyPushToTalk(
-            cfg.voice_hotkey, min_seconds=cfg.voice_min_utterance_seconds
-        )
+        if cfg.voice_activation == "hold":
+            ptt = HotkeyPushToTalk(
+                cfg.voice_hotkey, min_seconds=cfg.voice_min_utterance_seconds
+            )
+        else:
+            ptt = DoubleTapToggle(
+                cfg.voice_hotkey,
+                min_seconds=cfg.voice_min_utterance_seconds,
+                tap_window=cfg.voice_tap_window_seconds,
+                max_seconds=cfg.voice_max_session_seconds,
+            )
 
     from assistant.voice.confirm import SpokenConfirmer
 
