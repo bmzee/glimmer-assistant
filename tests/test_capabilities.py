@@ -43,7 +43,8 @@ def test_each_capability_says_what_it_enables():
 
 
 def test_input_monitoring_is_reported_because_ptt_dies_silently_without_it():
-    report = capability_report(probes=_probes(input_monitoring=lambda: False))
+    report = capability_report(probes=_probes(input_monitoring=lambda: False),
+                               activation="double_tap")
     denied = [c for c in report if not c.granted]
     assert any("input monitoring" in c.name.lower() for c in denied)
     ptt = next(c for c in denied if "input monitoring" in c.name.lower())
@@ -51,9 +52,11 @@ def test_input_monitoring_is_reported_because_ptt_dies_silently_without_it():
 
 
 def test_microphone_and_hotkey_are_required_not_optional():
-    """Without either, the assistant cannot be spoken to at all."""
+    """Without either, the assistant cannot be spoken to at all -- but only
+    when a hotkey is actually driving capture."""
     report = capability_report(
-        probes=_probes(microphone=lambda: False, input_monitoring=lambda: False)
+        probes=_probes(microphone=lambda: False, input_monitoring=lambda: False),
+        activation="double_tap",
     )
     names = [c.name.lower() for c in missing_required(report)]
     assert any("microphone" in n for n in names)
@@ -107,3 +110,19 @@ def test_capability_is_immutable():
     except Exception:
         return
     raise AssertionError("Capability should be frozen")
+
+
+def test_input_monitoring_is_not_required_for_click_activation():
+    """The menu-bar button is our own UI receiving our own click.
+
+    Reporting it as required under click activation produces a permission
+    dialog for something irrelevant, which trains the user to dismiss the
+    dialogs that do matter.
+    """
+    report = capability_report(
+        probes=_probes(input_monitoring=lambda: False), activation="click"
+    )
+    assert missing_required(report) == []
+    im = next(c for c in report if "input monitoring" in c.name.lower())
+    assert not im.required
+    assert not im.granted, "still reported, just not blocking"

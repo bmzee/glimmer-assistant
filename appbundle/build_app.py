@@ -31,7 +31,7 @@ EXECUTABLE = "glimmer-assistant"
 # These strings are shown verbatim in the consent dialog and are the only
 # context the user gets for an irreversible-feeling decision. Say why, not what.
 MIC_USAGE = (
-    "Glimmer Assistant records audio only while you hold the push-to-talk key, "
+    "Glimmer Assistant records audio only between Start and Stop Listening, "
     "so it can transcribe your request on this Mac. Audio is never uploaded."
 )
 APPLE_EVENTS_USAGE = (

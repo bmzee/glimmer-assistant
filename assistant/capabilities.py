@@ -98,9 +98,10 @@ _SPEC = [
      "Hearing you at all. Without it the assistant cannot take any spoken request.",
      f"{_SETTINGS} > Microphone — enable Glimmer Assistant."),
     ("input_monitoring", "Input Monitoring", True,
-     "The push-to-talk hotkey. Without it the key does nothing and the app "
-     "looks dead, even though it is running.",
-     f"{_SETTINGS} > Input Monitoring (and Accessibility) — enable Glimmer Assistant."),
+     "The push-to-talk hotkey. Only needed if you switch voice_activation to "
+     "'hold' or 'double_tap'; the menu-bar button needs no permission.",
+     f"{_SETTINGS} > Input Monitoring (and Accessibility) — enable the app that "
+     "launches the assistant (the bundled app itself, or your terminal in dev mode)."),
     ("automation_mail", "Automation: Mail", False,
      "Reading your recent email and drafting replies.",
      f"{_SETTINGS} > Automation > Glimmer Assistant — enable Mail."),
@@ -124,13 +125,24 @@ def _safe(probe) -> bool:
         return False
 
 
-def capability_report(probes: dict | None = None) -> list[Capability]:
+def capability_report(
+    probes: dict | None = None, activation: str = "click"
+) -> list[Capability]:
+    """Report capabilities for the ACTIVATION MODE actually in use.
+
+    Input Monitoring is only needed for a global hotkey. With click activation
+    -- the default -- it is irrelevant, and reporting it as required produces a
+    permission dialog for something that does not matter, which trains the user
+    to dismiss the dialogs that do.
+    """
     p = {**_DEFAULT_PROBES, **(probes or {})}
+    hotkey_in_use = activation in ("hold", "double_tap")
     return [
         Capability(
             name=name,
             granted=_safe(p[key]),
-            required=required,
+            # Input Monitoring matters only when a hotkey drives capture.
+            required=required and (key != "input_monitoring" or hotkey_in_use),
             enables=enables,
             how_to_grant=how,
         )

@@ -83,7 +83,8 @@ def bundled_main(
         # A denied grant is invisible: the hotkey just does nothing, a calendar
         # read just fails. Report capability-first -- the user cares that
         # "read your email" is unavailable, not which TCC grant is missing.
-        caps = capabilities if capabilities is not None else capability_report()
+        caps = (capabilities if capabilities is not None
+                else capability_report(activation=cfg.voice_activation))
         print("capabilities:\n" + format_report(caps))
         blocked = missing_required(caps)
         if blocked:
@@ -96,21 +97,64 @@ def bundled_main(
         if run is None:
             from assistant.main import build_voice_session
 
-            session = build_voice_session(cfg, sys.platform)
+            if cfg.voice_activation in ("listen", "click"):
+                # A window, not a menu-bar item: overflow status items are
+                # dropped silently on a notched Mac with a busy menu bar, and
+                # an invisible control is the failure this UI exists to remove.
+                from assistant.ui.window import AssistantWindow
 
-            # With click activation the menu bar owns the main thread (AppKit
-            # requires it) and the voice session runs behind it. That is also
-            # what makes the app visible at all: without it there is no window,
-            # no Dock icon, and no sign it is running.
-            if cfg.voice_activation == "click":
-                from assistant.ui.menubar import MenuBarApp
+                # Capture objects are cheap and model-free, so the window can
+                # exist immediately -- before the 10-30s model load.
+                hands_free = cfg.voice_activation == "listen"
+                if hands_free:
+                    from assistant.voice.vad import VoiceActivityCapture
 
-                menubar = MenuBarApp(
-                    session.ptt, session_runner=session.run_forever
-                )
-                session.add_listener(menubar.on_voice_event)
-                run = menubar.run
+                    talker = VoiceActivityCapture(
+                        min_seconds=cfg.voice_min_utterance_seconds,
+                        speech_level=cfg.voice_speech_level,
+                        silence_seconds=cfg.voice_silence_seconds,
+                    )
+                else:
+                    from assistant.voice.click import ClickToTalk
+
+                    talker = ClickToTalk(
+                        min_seconds=cfg.voice_min_utterance_seconds,
+                        max_seconds=cfg.voice_max_session_seconds,
+                    )
+                ui = AssistantWindow(talker, hands_free=hands_free)
+
+                def build_and_run():
+                    """Build the models IN the thread that will use them.
+
+                    MLX streams are thread-local. Building Parakeet on the main
+                    thread and running the session on a worker produced
+                    'There is no Stream(cpu, 1) in current thread.' on the first
+                    transcription -- every turn failed. AppKit owns the main
+                    thread, so the models must come to the worker rather than
+                    the other way round.
+
+                    It also means the window appears immediately instead of
+                    after a 10-30s model load with nothing on screen.
+                    """
+                    try:
+                        ui.set_state("idle")
+                        ui.set_last_exchange("Loading models…")
+                        session = build_voice_session(cfg, sys.platform, ptt=talker)
+                        session.add_listener(ui.on_voice_event)
+                        ui.set_last_exchange(
+                            "Just speak — it is listening."
+                            if hands_free else
+                            "Click Start Listening, then speak."
+                        )
+                        session.run_forever()
+                    except Exception as e:
+                        print(traceback.format_exc())
+                        ui.on_voice_event("error", e)
+
+                ui._session_runner = build_and_run
+                run = ui.run
             else:
+                session = build_voice_session(cfg, sys.platform)
                 run = session.run_forever
 
         try:

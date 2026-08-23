@@ -110,8 +110,13 @@ def patch_plist(app: Path) -> None:
         "CFBundleShortVersionString": VERSION,
         "CFBundleVersion": VERSION,
         "LSMinimumSystemVersion": "13.0",
-        # A push-to-talk assistant should not own a Dock icon or steal focus.
-        "LSUIElement": True,
+        # NOT LSUIElement. That was right for the menu-bar design and is wrong
+        # now: a background agent cannot reliably surface a TCC prompt, because
+        # those need a foreground app context -- so the microphone dialog never
+        # appeared and recording silently captured nothing. It also contradicts
+        # the window's NSApplicationActivationPolicyRegular. A Dock icon is a
+        # feature here: it is how you find the app and quit it.
+        "LSUIElement": False,
         "NSMicrophoneUsageDescription": MIC_USAGE,
         "NSAppleEventsUsageDescription": APPLE_EVENTS_USAGE,
         "NSHighResolutionCapable": True,

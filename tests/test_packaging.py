@@ -59,7 +59,11 @@ def test_has_its_own_stable_bundle_identifier(tmp_path):
 def test_declares_microphone_usage(tmp_path):
     """Without this key macOS kills the process instead of prompting."""
     text = plist_of(build(tmp_path))["NSMicrophoneUsageDescription"]
-    assert text and "push-to-talk" in text.lower()
+    # Must describe the interaction the user actually has. It said
+    # "while you hold the push-to-talk key" long after the app had switched to
+    # a Start/Stop button, so the consent dialog described something that no
+    # longer existed.
+    assert text and "listening" in text.lower()
 
 
 def test_declares_apple_events_usage(tmp_path):

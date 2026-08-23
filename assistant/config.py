@@ -36,17 +36,27 @@ class Config:
     # activation delay. See docs/voice-hotkey.md.
     voice_hotkey: str = "alt_r"
     voice_min_utterance_seconds: float = 0.3
-    # "click": start/stop from the menu bar. The DEFAULT, because it is the
-    #   only mode that needs no permission -- the hotkey modes require Input
-    #   Monitoring, and while that is ungranted the key silently does nothing
-    #   and the app appears dead.
+    # "listen": hands-free. The microphone stays open and an utterance is
+    #   bounded by speech itself -- start talking and it hears you, stop and it
+    #   answers. The DEFAULT: no clicking, and no permission beyond Microphone.
+    # "click": start/stop from a button. Needs no permission either, but
+    #   click-speak-click is worse than just talking.
     # "double_tap": tap the hotkey twice to start, twice again to stop.
     # "hold": classic push-to-talk, hold the key while speaking.
-    voice_activation: str = "click"
+    voice_activation: str = "listen"
     voice_tap_window_seconds: float = 0.4
     # A toggle can be left on in a way push-to-talk cannot, so a forgotten
     # session stops itself rather than recording indefinitely.
     voice_max_session_seconds: float = 120.0
+    # Hands-free tuning. speech_level is the RMS above which a frame counts as
+    # speech; silence_seconds is how long a pause must run before the utterance
+    # is considered finished -- too short truncates anyone who thinks mid
+    # sentence, too long makes every reply feel laggy.
+    # Speak a short filler as soon as the transcript lands. It does not make
+    # the answer faster; it stops a 15-24s gap reading as a broken app.
+    voice_acknowledge: bool = True
+    voice_speech_level: float = 0.06
+    voice_silence_seconds: float = 0.9
     enable_web: bool = True
     enable_apple: bool = True
     enable_m365: bool = False
@@ -110,7 +120,8 @@ _TEMPLATE = """\
 
 # Push-to-talk key, and the shortest utterance treated as speech.
 # voice_hotkey: alt_r        # right Option; see docs/voice-hotkey.md for alternatives
-# voice_activation: click        # 'double_tap' or 'hold' use the hotkey,
+# voice_activation: listen       # 'click' for a button; 'double_tap'/'hold'
+#                                # use the hotkey,
 #                                # which needs Input Monitoring granted
 # voice_tap_window_seconds: 0.4
 # voice_max_session_seconds: 120.0

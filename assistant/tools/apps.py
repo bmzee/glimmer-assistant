@@ -4,6 +4,7 @@ import stat
 from pathlib import Path
 
 from assistant.security.paths import PathNotAllowedError, resolve_safe
+from assistant.tools.appnames import resolve_app_name
 from assistant.tools.adapters.base import PlatformAdapter
 from assistant.tools.registry import RiskTier, Tool
 
@@ -56,7 +57,36 @@ _KNOWN_EXECUTING = frozenset({
 
 def make_app_tools(adapter: PlatformAdapter, allowed_roots: list[Path]) -> list[Tool]:
     def open_app(args: dict) -> str:
-        return adapter.launch_app(args["name"])
+        """Resolve against installed apps before launching.
+
+        Speech recognition mangles proper nouns -- "open chrome" arrived as
+        "Grom". Handing that to `open -a` fails uselessly when the assistant
+        could see there is no such app and that Chrome is one edit away.
+        Resolve when it is obvious, ASK when it is not, and never silently open
+        something the user did not mean.
+        """
+        requested = (args.get("name") or "").strip()
+        if not requested:
+            return "ERROR: no application name given."
+
+        match, candidates = resolve_app_name(requested)
+        if match:
+            result = adapter.launch_app(match)
+            # Say which app, since it may not be the words the user spoke.
+            if not result.startswith("ERROR:") and match.lower() != requested.lower():
+                return f"{result} (interpreted {requested!r} as {match!r})"
+            return result
+        if candidates:
+            options = ", ".join(candidates)
+            return (
+                f"ERROR: no application called {requested!r} is installed. "
+                f"Did you mean one of: {options}? Ask the user which one, then "
+                "call open_app again with the exact name."
+            )
+        return (
+            f"ERROR: no application called {requested!r} is installed, and "
+            "nothing similar was found. Ask the user for the exact app name."
+        )
 
     def open_path(args: dict) -> str:
         try:

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import threading
 
-from assistant.voice.audio import _Recorder, assemble
+from assistant.voice.audio import _Recorder, assemble, rms_level
 
 
 class ClickToTalk:
@@ -33,6 +33,22 @@ class ClickToTalk:
         self._stop = threading.Event()
         self._shutdown = threading.Event()
         self._listening = False
+        self._recorder = None
+
+    @property
+    def level(self) -> float:
+        """Current input loudness, 0..1, for the UI meter.
+
+        Without this the user has only the word "Listening" to go on, which is
+        indistinguishable from a dead microphone.
+        """
+        rec = self._recorder
+        if rec is None or not self._listening:
+            return 0.0
+        try:
+            return rms_level(rec.buffer)
+        except Exception:
+            return 0.0
 
     @property
     def is_listening(self) -> bool:
@@ -65,6 +81,7 @@ class ClickToTalk:
             return None
 
         recorder = self._recorder_factory(self._sample_rate)
+        self._recorder = recorder
         recorder.start()
         try:
             # Bounded even if the user forgets: a click-toggle can be left on
@@ -73,6 +90,7 @@ class ClickToTalk:
         finally:
             recorder.stop()
             self._listening = False
+            self._recorder = None
             self._stop.clear()
 
         if self._shutdown.is_set():

@@ -6,6 +6,36 @@ import time
 import numpy as np
 
 
+# The meter exists because "Listening…" is a label, not feedback: with only a
+# status word, a working microphone and a dead one look identical. Showing the
+# level makes "it can hear you" observable rather than a matter of faith.
+_METER_WIDTH = 16
+
+
+def rms_level(frames, window_frames: int | None = 8) -> float:
+    """Loudness of the most RECENT audio, 0..1.
+
+    Recent, not cumulative: a meter averaging the whole recording would freeze
+    shortly after a loud start and stop responding to the speaker.
+    """
+    if not frames:
+        return 0.0
+    recent = frames[-window_frames:] if window_frames else frames
+    data = np.concatenate([np.asarray(f, dtype="float32") for f in recent])
+    if data.size == 0:
+        return 0.0
+    rms = float(np.sqrt(np.mean(np.square(data))))
+    # Speech sits well below full scale; scale so normal talking fills the bar.
+    return max(0.0, min(1.0, rms * 6.0))
+
+
+def level_bar(level: float) -> str:
+    """Fixed-width meter. Fixed so the window does not jitter as you speak."""
+    filled = int(max(0.0, min(1.0, level)) * _METER_WIDTH)
+    # Always render something: an empty meter reads as a broken one.
+    return "▇" * filled + "▁" * (_METER_WIDTH - filled)
+
+
 def assemble(frames: list[np.ndarray]) -> np.ndarray:
     if not frames:
         return np.empty(0, dtype="float32")
