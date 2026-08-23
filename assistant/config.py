@@ -36,10 +36,13 @@ class Config:
     # activation delay. See docs/voice-hotkey.md.
     voice_hotkey: str = "alt_r"
     voice_min_utterance_seconds: float = 0.3
-    # "double_tap": tap twice to start listening, twice again to stop -- hands
-    # free, and comfortable for anything longer than a sentence.
+    # "click": start/stop from the menu bar. The DEFAULT, because it is the
+    #   only mode that needs no permission -- the hotkey modes require Input
+    #   Monitoring, and while that is ungranted the key silently does nothing
+    #   and the app appears dead.
+    # "double_tap": tap the hotkey twice to start, twice again to stop.
     # "hold": classic push-to-talk, hold the key while speaking.
-    voice_activation: str = "double_tap"
+    voice_activation: str = "click"
     voice_tap_window_seconds: float = 0.4
     # A toggle can be left on in a way push-to-talk cannot, so a forgotten
     # session stops itself rather than recording indefinitely.
@@ -107,7 +110,8 @@ _TEMPLATE = """\
 
 # Push-to-talk key, and the shortest utterance treated as speech.
 # voice_hotkey: alt_r        # right Option; see docs/voice-hotkey.md for alternatives
-# voice_activation: double_tap   # or 'hold' for classic push-to-talk
+# voice_activation: click        # 'double_tap' or 'hold' use the hotkey,
+#                                # which needs Input Monitoring granted
 # voice_tap_window_seconds: 0.4
 # voice_max_session_seconds: 120.0
 # voice_min_utterance_seconds: 0.3
