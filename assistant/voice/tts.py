@@ -19,10 +19,20 @@ def _espeak_backend(lang: str):
     with _backends_lock:
         backend = _backends.get(lang)
         if backend is None:
-            # Importing kokoro_onnx.tokenizer first lets espeakng_loader point
-            # phonemizer at the bundled espeak-ng shared library.
-            import kokoro_onnx.tokenizer  # noqa: F401
+            import espeakng_loader
             from phonemizer.backend import EspeakBackend
+            from phonemizer.backend.espeak.wrapper import EspeakWrapper
+
+            # Point phonemizer at the bundled espeak-ng EXPLICITLY. Importing
+            # kokoro_onnx.tokenizer is not enough: it calls set_library() inside
+            # Tokenizer.__init__, so the path is configured only as a side
+            # effect of constructing a Kokoro instance. Depending on that
+            # ordering meant the fast path raised whenever the backend was built
+            # first -- and the caller's fallback swallowed it, silently reverting
+            # TTS to ~1.9s per utterance with no error. Bundled apps and
+            # injected kokoro objects both hit that order.
+            EspeakWrapper.set_data_path(espeakng_loader.get_data_path())
+            EspeakWrapper.set_library(espeakng_loader.get_library_path())
 
             backend = EspeakBackend(
                 lang, preserve_punctuation=True, with_stress=True

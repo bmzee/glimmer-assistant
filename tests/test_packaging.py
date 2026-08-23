@@ -104,3 +104,46 @@ def test_bundle_declares_a_version(tmp_path):
     p = plist_of(build(tmp_path))
     assert p["CFBundleShortVersionString"]
     assert p["CFBundlePackageType"] == "APPL"
+
+
+# --- self-contained bundle (Plan 7) -----------------------------------------
+
+def test_adhoc_signing_omits_hardened_runtime():
+    """`--options runtime` makes the bundled app unlaunchable.
+
+    Hardened runtime enables library validation. A PyInstaller bundle loads an
+    embedded Python.framework signed separately, and two independently
+    ad-hoc-signed binaries share no Team ID, so validation rejects the
+    framework:
+
+        Failed to load Python shared library ... different Team IDs
+
+    Verified by building it both ways: with the flag the app exits 255 before
+    running any Python; without it, it reaches the run loop. Hardened runtime
+    is only a notarization requirement, and notarization needs a Developer ID
+    an ad-hoc build does not have.
+    """
+    import inspect
+
+    from appbundle import build_dist
+
+    src = inspect.getsource(build_dist.sign)
+    body = src.split('"""')[-1]  # ignore the docstring, which names the flag
+    assert '"runtime"' not in body and "'runtime'" not in body, (
+        "hardened runtime re-introduced into ad-hoc signing; the bundled app "
+        "will fail to load its embedded Python framework"
+    )
+
+
+def test_collect_all_includes_the_data_only_transitive_deps():
+    """language_tags and segments are why phonemization works when frozen.
+
+    Neither is imported directly; both are data-only transitive deps of
+    phonemizer. Without them the frozen app raises a FileNotFoundError naming
+    neither package, which reads like an espeak failure and sends you hunting
+    the wrong dylib.
+    """
+    from appbundle.build_dist import COLLECT_ALL
+
+    for pkg in ("language_tags", "segments", "espeakng_loader", "mlx"):
+        assert pkg in COLLECT_ALL, f"{pkg} missing from COLLECT_ALL"

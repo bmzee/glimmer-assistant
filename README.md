@@ -46,6 +46,7 @@ Configuration (endpoint, model, allowed file roots) lives in `assistant/config.y
 4. ~~Integrations — web (Playwright), Apple Calendar/Mail, Microsoft 365, Rule-of-Two elevation, spoken confirmation~~ ✅
 5. ~~Evals & quality — model A/B, context compaction, sentence-level TTS streaming, system-control tools~~ ✅
 6. ~~Packaging — `.app` bundle so the assistant owns its own macOS permissions~~ ✅
+7. ~~Distribution — self-contained `.app` + `.dmg`, no Python or venv needed~~ ✅
 
 ### Where it stands
 
@@ -61,8 +62,12 @@ Configuration (endpoint, model, allowed file roots) lives in `assistant/config.y
   assistant* rather than to your terminal — see [docs/packaging.md](docs/packaging.md).
 
 ```bash
-python -m appbundle.build_app --python "$(pwd)/.venv/bin/python"
-open "dist/Glimmer Assistant.app"
+python -m appbundle.build_dist --dmg
 ```
+
+Produces a 1.24 GB self-contained `Glimmer Assistant.app` and a 0.31 GB
+`.dmg` — drag it to Applications like any Mac app. It still needs
+[Ollama](https://ollama.com) running (the model is ~18 GB and cannot be
+bundled); the app checks on launch and tells you if anything is missing.
 
 Apache-2.0-friendly stack; built Mac-first with a platform-adapter layer for a Windows port.
