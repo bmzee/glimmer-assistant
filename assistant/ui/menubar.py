@@ -137,11 +137,21 @@ class MenuBarApp:
 
     def run(self) -> None:
         """Start the AppKit event loop. Blocks; the voice session runs behind."""
-        import objc
-        from AppKit import NSApplication, NSStatusBar, NSVariableStatusItemLength
+        from AppKit import (
+            NSApplication,
+            NSApplicationActivationPolicyAccessory,
+            NSStatusBar,
+            NSVariableStatusItemLength,
+        )
         from Foundation import NSObject
 
         app = NSApplication.sharedApplication()
+        # Required before NSStatusBar will reliably register an item in a
+        # bundled LSUIElement app. Without it the event loop runs, the process
+        # stays alive, and NO ITEM APPEARS -- with no error anywhere. A plain
+        # script gets away with omitting this; a PyInstaller --windowed bundle
+        # does not.
+        app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
 
         outer = self
 
@@ -159,6 +169,14 @@ class MenuBarApp:
         self._item = NSStatusBar.systemStatusBar().statusItemWithLength_(
             NSVariableStatusItemLength
         )
+        # Fail loudly. A nil status item means the app runs forever showing
+        # nothing, which is indistinguishable from a hang -- exactly the
+        # failure this UI exists to prevent.
+        if self._item is None or self._item.button() is None:
+            raise RuntimeError(
+                "could not create a menu bar item; the assistant would run "
+                "with no visible control. Check the app's activation policy."
+            )
         self._item.button().setTitle_(title_for(self._state))
         self._rebuild_menu()
 

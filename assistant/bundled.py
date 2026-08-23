@@ -83,7 +83,8 @@ def bundled_main(
         # A denied grant is invisible: the hotkey just does nothing, a calendar
         # read just fails. Report capability-first -- the user cares that
         # "read your email" is unavailable, not which TCC grant is missing.
-        caps = capabilities if capabilities is not None else capability_report()
+        caps = (capabilities if capabilities is not None
+                else capability_report(activation=cfg.voice_activation))
         print("capabilities:\n" + format_report(caps))
         blocked = missing_required(caps)
         if blocked:
