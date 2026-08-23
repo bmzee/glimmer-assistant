@@ -61,3 +61,75 @@ def _normalize_allowed_roots(cfg: Config) -> None:
         raise ValueError(
             f"config key 'allowed_roots' must be a string or a list of strings, got {value!r}"
         )
+
+
+# A packaged .app cannot use a config inside itself: the file is not shipped
+# there, editing anything inside a code-signed bundle invalidates the signature
+# (and with it the TCC grants), and an app update would replace it. So the
+# user-editable config lives beside the audit log instead.
+USER_CONFIG_PATH = Path("~/.glimmer-assistant/config.yaml").expanduser()
+
+PACKAGED_CONFIG_PATH = Path(__file__).parent / "config.yaml"
+
+_TEMPLATE = """\
+# Glimmer Assistant configuration.
+# Everything here is commented out and shows the built-in default.
+# Uncomment a line to change it, then restart the app.
+
+# The Ollama model to use. It must already be pulled:  ollama pull <name>
+# llm_model: qwen3.8:27b
+# llm_model: muse-glimmer:30b   # faster per token, but calls tools it does not need
+
+# llm_base_url: http://localhost:11434/v1
+
+# Directories the assistant may read and write. Everything else is refused.
+# allowed_roots: ["~"]
+
+# Optional tool groups.
+# enable_web: true
+# enable_apple: true
+# enable_m365: false
+# m365_client_id: ""
+
+# Push-to-talk key, and the shortest utterance treated as speech.
+# voice_hotkey: ctrl
+# voice_min_utterance_seconds: 0.3
+
+# Suppresses the model's hidden reasoning tokens. Faster to first word, but
+# MEASURED WORSE: eval drops 10/10 -> 9/10 and reasoning markers can leak into
+# spoken output. See docs/latency.md before enabling.
+# llm_reasoning_effort: none
+"""
+
+
+def resolve_config_path(
+    user: str | Path | None = None,
+    packaged: str | Path | None = None,
+) -> Path | None:
+    """User config first, then the one beside the module, then defaults."""
+    user_path = Path(user) if user is not None else USER_CONFIG_PATH
+    packaged_path = Path(packaged) if packaged is not None else PACKAGED_CONFIG_PATH
+    if user_path.is_file():
+        return user_path
+    if packaged_path.is_file():
+        return packaged_path
+    return None
+
+
+def ensure_user_config(path: str | Path | None = None) -> bool:
+    """Write a commented template so the settings are discoverable at all.
+
+    Returns True only when a file was created. An existing config is never
+    touched -- overwriting someone's edited settings on startup would be worse
+    than shipping no template. A location we cannot write (read-only home, or
+    a file where a directory should be) is not fatal: the app runs on defaults.
+    """
+    target = Path(path) if path is not None else USER_CONFIG_PATH
+    try:
+        if target.exists():
+            return False
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(_TEMPLATE)
+        return True
+    except OSError:
+        return False

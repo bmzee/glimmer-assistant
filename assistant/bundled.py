@@ -97,10 +97,12 @@ def bundled_main(
 
 
 def main() -> int:
-    config_path = Path(__file__).parent / "config.yaml"
-    from assistant.config import load_config
+    from assistant.config import ensure_user_config, load_config, resolve_config_path
 
-    cfg = load_config(config_path if config_path.exists() else None)
+    # Drop a commented template on first run so the settings are discoverable.
+    # Without it a packaged user has no way to know the model is configurable.
+    ensure_user_config()
+    cfg = load_config(resolve_config_path())
     return bundled_main(cfg, log_path=DEFAULT_LOG)
 
 
