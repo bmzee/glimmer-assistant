@@ -22,16 +22,31 @@ def load_tasks(path: str | Path) -> list[dict]:
     return data
 
 
+# The exact string AgentLoop returns when it exhausts max_iterations. A run
+# that ends this way produced NO answer and must never score as a pass: tasks
+# expecting no tools and no substrings would otherwise be fully satisfied by
+# it, which is how a model that wandered for 149s and gave up once scored a
+# clean 10/10.
+STEP_LIMIT_MARKER = "I hit my step limit before finishing"
+
+
 def score(task: dict, answer: str, tools_used: list[str]) -> dict:
-    lowered = (answer or "").lower()
+    text = answer or ""
+    lowered = text.lower()
     missing_tools = [t for t in task["expect_tools"] if t not in tools_used]
     missing_substrings = [
         s for s in task["expect_substrings"] if s.lower() not in lowered
     ]
     forbidden_used = [t for t in task["forbid_tools"] if t in tools_used]
+    # Declining is a legitimate answer; giving up is not. Only the loop's own
+    # cap message and an empty reply count as giving up.
+    gave_up = (not text.strip()) or STEP_LIMIT_MARKER in text
     return {
         "id": task["id"],
-        "passed": not (missing_tools or missing_substrings or forbidden_used),
+        "passed": not (
+            missing_tools or missing_substrings or forbidden_used or gave_up
+        ),
+        "gave_up": gave_up,
         "missing_tools": missing_tools,
         "missing_substrings": missing_substrings,
         "forbidden_used": forbidden_used,

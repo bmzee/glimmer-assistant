@@ -54,5 +54,21 @@ def test_voice_config_defaults():
     cfg = load_config(None)
     assert cfg.voice_stt_model == "mlx-community/parakeet-tdt-0.6b-v2"
     assert cfg.voice_tts_voice == "af_heart"
-    assert cfg.voice_hotkey == "ctrl"
+    # Right Option: reachable, and not a modifier used by ordinary shortcuts.
+    assert cfg.voice_hotkey == "alt_r"
     assert cfg.voice_min_utterance_seconds == 0.3
+
+
+def test_voice_activation_defaults_to_double_tap():
+    """Holding a key for a whole request is uncomfortable past a sentence."""
+    cfg = load_config(None)
+    assert cfg.voice_activation == "double_tap"
+    assert cfg.voice_tap_window_seconds == 0.4
+    # A toggle can be left on in a way push-to-talk cannot; it must self-stop.
+    assert cfg.voice_max_session_seconds == 120.0
+
+
+def test_hold_mode_is_still_selectable(tmp_path):
+    f = tmp_path / "config.yaml"
+    f.write_text("voice_activation: hold\n")
+    assert load_config(f).voice_activation == "hold"

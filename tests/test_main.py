@@ -54,17 +54,27 @@ def test_build_voice_session_wires_components(tmp_path):
     session.run_once()
 
 
-def test_voice_event_printer_formats(capsys):
-    from assistant.main import _voice_event_printer
+def test_voice_event_handler_logs_and_notifies(capsys):
+    """Both channels matter: the log is the record, the notification is the
+    only way a missed spoken reply is recoverable."""
+    from assistant.main import _make_voice_event_handler
 
-    _voice_event_printer("transcribed", "hi")
-    _voice_event_printer("answered", "yo")
-    _voice_event_printer("error", RuntimeError("x"))
+    sent = []
+
+    class FakeNotifier:
+        def notify(self, name, payload):
+            sent.append((name, payload))
+
+    handle = _make_voice_event_handler(notifier=FakeNotifier())
+    handle("transcribed", "hi")
+    handle("answered", "yo")
+    handle("error", RuntimeError("x"))
 
     out = capsys.readouterr().out
     assert "you said: hi" in out
     assert "assistant: yo" in out
     assert "[error]" in out
+    assert [n for n, _ in sent] == ["transcribed", "answered", "error"]
 
 
 def test_build_loop_registers_web_tools_when_enabled(tmp_path):

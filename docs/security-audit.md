@@ -119,8 +119,13 @@ is not mistaken for a complete failure list.
 1. **Tier 1 still auto-approves.** `open_app`, `focus_window`, `set_volume`, `open_url`
    execute with no confirmation and no undo. The dangerous tools were promoted out of
    Tier 1 rather than building the undo window the spec calls for.
-2. **The screenshot denylist protects the audit log from `screenshot` only.** Other
-   write-capable tools can still address paths anywhere under `allowed_roots`.
+2. ~~The screenshot denylist protects the audit log from `screenshot` only. Other
+   write-capable tools can still address paths anywhere under `allowed_roots`.~~
+   **Overstated — corrected 2026-08-23.** There is no `write_file` tool: the file
+   tools are `list_dir` and `read_file` only. The sole model-reachable writers are
+   `screenshot` (confined to the capture folder, with the denylist) and `run_shell`
+   (CONFIRM tier, sandbox-wrapped, requires explicit approval). The gap the denylist
+   was written for does not extend beyond the tool it already covers.
 3. **MCP definition pinning** (§8.4) remains unimplemented — latent while no server is
    adopted.
 

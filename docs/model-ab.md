@@ -62,12 +62,14 @@ The Qwen recommendation survives this correction, because the deciding factors b
 
 `docs/spec.md` §2 specifies the Ollama **MLX engine with the DFlash speculative-decoding drafter**. Both models here were pulled as plain GGUF tags. `ollama ps` confirms 100% GPU placement, so this is a build issue, not a placement issue.
 
-**Resolved: the MLX build was run through the full eval suite (2026-08-23) and scores 10/10, the same as the other two — but does not fix the wandering.**
+**Resolved: the MLX build was run through the full eval suite (2026-08-23) and scores 9/10 — and does not fix the wandering.**
+
+It was first reported here as 10/10. That was a scorer defect, not a result: the `no-tool-fits` run hit the 15-iteration cap and returned *"I hit my step limit before finishing"*, and because that task expects no tools and no substrings, an empty non-answer satisfied every criterion. The scorer now fails a run that gave up (`evals/run.py`, `STEP_LIMIT_MARKER`). Rescoring the stored runs moved **only** this one — Qwen holds 10/10 in both configurations, so the default's score was never in question.
 
 | | eval | wall clock | `no-tool-fits` |
 |---|---:|---:|---:|
 | `qwen3.8:27b` | 10/10 | **4.2 min** | 16.1s, **0 tools** |
-| `muse-glimmer:30b-mlx` | 10/10 | 9.0 min | **148.8s, 3 tools** |
+| `muse-glimmer:30b-mlx` | **9/10** | 9.0 min | **148.8s, 3 tools** |
 
 Twice the wall clock overall, and **9× on the open-ended prompt**. Asked to *"order me a pizza from the shop down the road"*, it called `list_dir`, `list_windows`, and `open_app` — and the audit log shows what that last one did:
 
