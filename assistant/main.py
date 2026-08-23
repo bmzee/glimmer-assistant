@@ -140,8 +140,15 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
         tts = SafeTTS(KokoroTTS(cfg.voice_tts_voice))
     if ptt is None:
         from assistant.voice.audio import DoubleTapToggle, HotkeyPushToTalk
+        from assistant.voice.click import ClickToTalk
 
-        if cfg.voice_activation == "hold":
+        if cfg.voice_activation == "click":
+            # No global hotkey, so no Input Monitoring required.
+            ptt = ClickToTalk(
+                min_seconds=cfg.voice_min_utterance_seconds,
+                max_seconds=cfg.voice_max_session_seconds,
+            )
+        elif cfg.voice_activation == "hold":
             ptt = HotkeyPushToTalk(
                 cfg.voice_hotkey, min_seconds=cfg.voice_min_utterance_seconds
             )

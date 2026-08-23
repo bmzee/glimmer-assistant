@@ -25,7 +25,26 @@ class VoiceSession:
         self._tts = tts
         self._min_seconds = min_utterance_seconds
         self._agent_streams = self._supports_streaming(agent)
-        self._on_event = on_event or (lambda name, payload: None)
+        # A list, not a single callback: the log, the notifier and the menu
+        # bar all want every event, and each must be isolated -- an indicator
+        # that throws must not kill the turn it was reporting on.
+        self._listeners = [on_event] if on_event else []
+
+    @property
+    def ptt(self):
+        """Exposed so a UI can drive start/stop without reaching into privates."""
+        return self._ptt
+
+    def add_listener(self, handler) -> None:
+        """Add an event listener. Failures in one never affect the others."""
+        self._listeners.append(handler)
+
+    def _on_event(self, name, payload) -> None:
+        for handler in self._listeners:
+            try:
+                handler(name, payload)
+            except Exception:
+                pass  # a broken listener must not take down a working turn
 
     @staticmethod
     def _supports_streaming(agent) -> bool:

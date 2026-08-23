@@ -97,7 +97,21 @@ def bundled_main(
             from assistant.main import build_voice_session
 
             session = build_voice_session(cfg, sys.platform)
-            run = session.run_forever
+
+            # With click activation the menu bar owns the main thread (AppKit
+            # requires it) and the voice session runs behind it. That is also
+            # what makes the app visible at all: without it there is no window,
+            # no Dock icon, and no sign it is running.
+            if cfg.voice_activation == "click":
+                from assistant.ui.menubar import MenuBarApp
+
+                menubar = MenuBarApp(
+                    session.ptt, session_runner=session.run_forever
+                )
+                session.add_listener(menubar.on_voice_event)
+                run = menubar.run
+            else:
+                run = session.run_forever
 
         try:
             run()

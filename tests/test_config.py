@@ -59,10 +59,15 @@ def test_voice_config_defaults():
     assert cfg.voice_min_utterance_seconds == 0.3
 
 
-def test_voice_activation_defaults_to_double_tap():
-    """Holding a key for a whole request is uncomfortable past a sentence."""
+def test_voice_activation_defaults_to_click():
+    """Click is the only mode that needs no permission.
+
+    Both hotkey modes require Input Monitoring; while that is ungranted the key
+    silently does nothing and the app appears completely dead. A menu-bar
+    button is our own UI receiving our own click.
+    """
     cfg = load_config(None)
-    assert cfg.voice_activation == "double_tap"
+    assert cfg.voice_activation == "click"
     assert cfg.voice_tap_window_seconds == 0.4
     # A toggle can be left on in a way push-to-talk cannot; it must self-stop.
     assert cfg.voice_max_session_seconds == 120.0
