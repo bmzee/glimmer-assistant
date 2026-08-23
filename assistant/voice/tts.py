@@ -96,3 +96,75 @@ class KokoroTTS:
                 text, voice=self._voice, speed=1.0, lang=lang
             )
         self._play(audio, sample_rate)
+
+
+class SpeakingFailed(RuntimeError):
+    """Every engine failed. The caller logs it; silence must not be silent."""
+
+
+class SaySpeech:
+    """macOS `say`. Always present, no model, no download -- the last resort."""
+
+    def __init__(self, voice: str | None = None):
+        self._voice = voice
+
+    def speak(self, text: str) -> None:
+        import shutil
+        import subprocess
+
+        say = shutil.which("say")
+        if not say:
+            raise SpeakingFailed("`say` not available")
+        argv = [say]
+        if self._voice:
+            argv += ["-v", self._voice]
+        argv.append(text)
+        subprocess.run(argv, capture_output=True, timeout=120)
+
+
+class SafeTTS:
+    """Speak via the primary engine, falling back rather than losing the reply.
+
+    In an app whose only output channel is audio, a dead synthesiser is a dead
+    app: the user asks and hears nothing, with no indication anything happened.
+
+    A failed primary is not retried. Kokoro failing once means it will fail
+    every turn, and each retry costs seconds of silence before the fallback
+    speaks.
+    """
+
+    def __init__(self, primary, fallback=None):
+        self._primary = primary
+        self._fallback = fallback if fallback is not None else SaySpeech()
+        self._primary_dead = False
+
+    def speak(self, text: str) -> None:
+        if not self._primary_dead:
+            try:
+                self._primary.speak(text)
+                return
+            except Exception:
+                self._primary_dead = True
+        try:
+            self._fallback.speak(text)
+        except Exception as e:
+            raise SpeakingFailed(f"no working speech engine: {e}") from e
+
+
+def spoken_form(text: str, max_chars: int = 600) -> str:
+    """Shorten text for speech, saying so.
+
+    A 36-item directory listing is fine on screen and unusable aloud, and
+    speech cannot be skimmed, skipped or replayed. Silently truncating instead
+    makes the assistant sound like it lost its train of thought, so the cut is
+    announced and the full text stays in the log.
+    """
+    text = (text or "").strip()
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars]
+    # Prefer a word boundary: a sentence ending mid-word sounds like a fault.
+    space = cut.rfind(" ")
+    if space > max_chars * 0.6:
+        cut = cut[:space]
+    return cut.rstrip() + "… there is more; the full answer is in the log."

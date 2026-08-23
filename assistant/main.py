@@ -102,13 +102,27 @@ def cli_confirm(request) -> bool:
     return input(f"ALLOW? {request.preview} [y/N] ").strip().lower() == "y"
 
 
-def _voice_event_printer(name, payload):
-    if name == "transcribed":
-        print(f"you said: {payload}")
-    elif name == "answered":
-        print(f"assistant: {payload}")
-    elif name == "error":
-        print(f"[error] {payload}")
+def _make_voice_event_handler(notifier=None):
+    """Log every turn AND surface it visibly.
+
+    The log is a record, not an interface -- nobody watches a file. Packaged,
+    audio is the only output channel, so a missed reply is simply gone unless
+    it also lands in Notification Centre.
+    """
+    from assistant.voice.notify import Notifier
+
+    notifier = notifier if notifier is not None else Notifier()
+
+    def handle(name, payload):
+        if name == "transcribed":
+            print(f"you said: {payload}")
+        elif name == "answered":
+            print(f"assistant: {payload}")
+        elif name == "error":
+            print(f"[error] {payload}")
+        notifier.notify(name, payload)
+
+    return handle
 
 
 def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
@@ -119,9 +133,11 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
 
         stt = ParakeetSTT(cfg.voice_stt_model)
     if tts is None:
-        from assistant.voice.tts import KokoroTTS
+        from assistant.voice.tts import KokoroTTS, SafeTTS
 
-        tts = KokoroTTS(cfg.voice_tts_voice)
+        # Wrap in SafeTTS: in an app whose only output is audio, a dead
+        # synthesiser means the user asks and hears nothing at all.
+        tts = SafeTTS(KokoroTTS(cfg.voice_tts_voice))
     if ptt is None:
         from assistant.voice.audio import DoubleTapToggle, HotkeyPushToTalk
 
@@ -147,7 +163,7 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
         loop,
         tts,
         min_utterance_seconds=cfg.voice_min_utterance_seconds,
-        on_event=_voice_event_printer,
+        on_event=_make_voice_event_handler(),
     )
 
 
