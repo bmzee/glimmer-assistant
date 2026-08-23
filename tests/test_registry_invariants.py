@@ -50,6 +50,9 @@ EXPECTED_OUTBOUND = {
 }
 
 # Tools that mutate or transmit MUST NOT be silently auto-approved.
+# NOTE: the gate auto-approves BOTH AUTO and UNDO (no undo mechanism is built),
+# so membership here requires CONFIRM or NEVER -- anything below that runs
+# without a prompt today, whatever the tier's name promises.
 MUST_NOT_BE_AUTO = {
     "create_calendar_event",
     "draft_mail",
@@ -59,6 +62,7 @@ MUST_NOT_BE_AUTO = {
     "run_shell",
     "quit_app",            # no Tier-1 undo window exists; unsaved work is unrecoverable
     "fill_form_field",     # one step from submitting the form
+    "open_path",           # `open` executes .command/.app/binaries OUTSIDE the sandbox
 }
 
 
@@ -109,12 +113,16 @@ def test_mutating_tools_are_never_auto_tier(tmp_path):
     from assistant.tools.registry import RiskTier
 
     tools = all_tools(tmp_path)
+    # The gate only prompts at CONFIRM (or Rule-of-Two elevation); UNDO falls
+    # through to auto-approve, so "not AUTO" alone would not stop silent runs.
     bad = [
         name
         for name in MUST_NOT_BE_AUTO
-        if name in tools and tools[name].risk_tier == RiskTier.AUTO
+        if name in tools and tools[name].risk_tier < RiskTier.CONFIRM
     ]
-    assert not bad, f"mutating/transmitting tools must not be AUTO tier: {bad}"
+    assert not bad, (
+        f"tools the gate would silently auto-approve (tier below CONFIRM): {bad}"
+    )
 
 
 def test_every_registered_tool_is_classified(tmp_path):
