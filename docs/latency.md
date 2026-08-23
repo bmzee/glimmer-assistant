@@ -5,7 +5,42 @@
 **Model under test:** `qwen3.8:27b` (current default)
 **Gate:** `docs/spec.md` §9 — *PTT release → first TTS audio ≤ 2.5s p50 for a no-tool answer.*
 
-## Result
+## Correction: 2.59s is not what users experience
+
+The 2.59s below is real but **unrepresentative**. It was measured with the
+optional tool groups disabled (`enable_web=False`, `enable_apple=False`) on the
+prompt *"say hello in one short sentence"* — the easiest case the app supports.
+
+With the real tool schema and a real question, time to the **first spoken word**
+is far worse:
+
+| turn | first spoken word | full answer |
+|---|---:|---:|
+| no tool — *"what can you help me with?"* | **23.9s** | 33.5s |
+| one tool — *"open the calculator"* | **14.5s** | 14.5s |
+| tool + ambiguity | **23.8s** | 25.7s |
+
+Streaming does not rescue this. The model emits **all** of its reasoning before
+any content, so there is nothing to stream until thinking finishes — and
+reasoning is ~60% of everything generated:
+
+| prompt | total tokens | thinking | answer |
+|---|---:|---:|---:|
+| "what can you help me with?" | 102 | **271 ch** | 184 ch |
+| "open the calculator" | 65 | **106 ch** | 0 |
+
+The answers are already short — the system prompt's "one or two short
+sentences" is obeyed. The wait is reasoning the user never hears.
+
+Suppressing it was measured and rejected (see below): 10/10 → 9/10 and
+`</think>` leaking into speech. So the mitigation is not speed but
+**acknowledgement** — the session speaks a short filler the moment the
+transcript lands, so a 20-second gap stops reading as a broken app.
+
+**Treat the §9 gate below as a floor for the easiest case, not a description of
+normal use.**
+
+## Result (easiest case, tool groups disabled)
 
 The gate measures **PTT release → first TTS audio**. With sentence-level
 streaming (spec §5) the answer is spoken as it is written, so the quantity that
