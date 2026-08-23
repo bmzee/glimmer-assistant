@@ -178,6 +178,9 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
         loop,
         tts,
         min_utterance_seconds=cfg.voice_min_utterance_seconds,
+        # The real wait is 15-24s: this model emits all its reasoning
+        # before any content, so streaming has nothing to say until then.
+        acknowledge=cfg.voice_acknowledge,
         on_event=_make_voice_event_handler(),
     )
 

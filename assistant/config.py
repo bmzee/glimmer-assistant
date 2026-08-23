@@ -52,6 +52,9 @@ class Config:
     # speech; silence_seconds is how long a pause must run before the utterance
     # is considered finished -- too short truncates anyone who thinks mid
     # sentence, too long makes every reply feel laggy.
+    # Speak a short filler as soon as the transcript lands. It does not make
+    # the answer faster; it stops a 15-24s gap reading as a broken app.
+    voice_acknowledge: bool = True
     voice_speech_level: float = 0.06
     voice_silence_seconds: float = 0.9
     enable_web: bool = True

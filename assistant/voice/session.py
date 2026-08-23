@@ -4,6 +4,7 @@ import inspect
 import time
 from typing import Callable
 
+from assistant.voice.acknowledge import acknowledgement_for
 from assistant.voice.streaming import split_sentences
 
 _ERROR_SPEECH = "Sorry, something went wrong."
@@ -17,6 +18,7 @@ class VoiceSession:
         agent,
         tts,
         min_utterance_seconds: float = 0.3,
+        acknowledge: bool = False,
         on_event: Callable[[str, object], None] | None = None,
     ):
         self._ptt = ptt
@@ -24,6 +26,7 @@ class VoiceSession:
         self._agent = agent
         self._tts = tts
         self._min_seconds = min_utterance_seconds
+        self._acknowledge = acknowledge
         self._agent_streams = self._supports_streaming(agent)
         # A list, not a single callback: the log, the notifier and the menu
         # bar all want every event, and each must be isolated -- an indicator
@@ -77,6 +80,17 @@ class VoiceSession:
             if not transcript:
                 return
             self._on_event("transcribed", transcript)
+            # Speak immediately. The first real word is 15-24s away because
+            # this model emits all its reasoning before any content, and there
+            # is nothing to stream until that finishes. This does not make the
+            # answer faster -- it stops the gap reading as "broken".
+            if self._acknowledge:
+                try:
+                    filler = acknowledgement_for(transcript)
+                    if filler:
+                        self._tts.speak(filler)
+                except Exception:
+                    pass  # a missing filler must never cost the real answer
             if self._agent_streams:
                 # Speech starts on sentence one, while the model is still
                 # writing; the reply is already fully spoken once run returns.
