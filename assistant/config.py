@@ -28,7 +28,13 @@ class Config:
     log_path: str = "~/.glimmer-assistant/actions.jsonl"
     voice_stt_model: str = "mlx-community/parakeet-tdt-0.6b-v2"
     voice_tts_voice: str = "af_heart"
-    voice_hotkey: str = "ctrl"
+    # Right Option. "ctrl" was the original default and was a poor one: it is a
+    # modifier pressed constantly for ordinary shortcuts, so Ctrl-C would open a
+    # voice turn. alt_r is the only good candidate that survives the real
+    # constraints -- fn is not exposed by pynput at all, ctrl_r and F13-F16 do
+    # not exist on MacBook keyboards, and caps_lock toggles state and has an
+    # activation delay. See docs/voice-hotkey.md.
+    voice_hotkey: str = "alt_r"
     voice_min_utterance_seconds: float = 0.3
     enable_web: bool = True
     enable_apple: bool = True
@@ -92,7 +98,7 @@ _TEMPLATE = """\
 # m365_client_id: ""
 
 # Push-to-talk key, and the shortest utterance treated as speech.
-# voice_hotkey: ctrl
+# voice_hotkey: alt_r        # right Option; see docs/voice-hotkey.md for alternatives
 # voice_min_utterance_seconds: 0.3
 
 # Suppresses the model's hidden reasoning tokens. Faster to first word, but

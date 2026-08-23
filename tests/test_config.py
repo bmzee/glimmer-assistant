@@ -54,5 +54,6 @@ def test_voice_config_defaults():
     cfg = load_config(None)
     assert cfg.voice_stt_model == "mlx-community/parakeet-tdt-0.6b-v2"
     assert cfg.voice_tts_voice == "af_heart"
-    assert cfg.voice_hotkey == "ctrl"
+    # Right Option: reachable, and not a modifier used by ordinary shortcuts.
+    assert cfg.voice_hotkey == "alt_r"
     assert cfg.voice_min_utterance_seconds == 0.3
