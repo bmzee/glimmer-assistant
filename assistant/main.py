@@ -146,8 +146,9 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
 def main() -> None:
     import sys
 
-    config_path = Path(__file__).parent / "config.yaml"
-    cfg = load_config(config_path if config_path.exists() else None)
+    from assistant.config import resolve_config_path
+
+    cfg = load_config(resolve_config_path())
 
     if "--voice" in sys.argv:
         print("loading voice models...")
