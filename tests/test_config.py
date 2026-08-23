@@ -59,15 +59,17 @@ def test_voice_config_defaults():
     assert cfg.voice_min_utterance_seconds == 0.3
 
 
-def test_voice_activation_defaults_to_click():
-    """Click is the only mode that needs no permission.
+def test_voice_activation_defaults_to_hands_free():
+    """Just talk. No key, no button, no permission beyond Microphone.
 
-    Both hotkey modes require Input Monitoring; while that is ungranted the key
-    silently does nothing and the app appears completely dead. A menu-bar
-    button is our own UI receiving our own click.
+    The hotkey modes need Input Monitoring, which macOS would not grant; click
+    mode needed no permission but click-speak-click is worse than simply
+    speaking.
     """
     cfg = load_config(None)
-    assert cfg.voice_activation == "click"
+    assert cfg.voice_activation == "listen"
+    assert 0 < cfg.voice_speech_level < 1
+    assert cfg.voice_silence_seconds > 0
     assert cfg.voice_tap_window_seconds == 0.4
     # A toggle can be left on in a way push-to-talk cannot; it must self-stop.
     assert cfg.voice_max_session_seconds == 120.0

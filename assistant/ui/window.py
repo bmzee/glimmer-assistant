@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import threading
 
+from assistant.voice.audio import level_bar
+
 STATE_TEXT = {
     "idle": "Ready",
     "listening": "Listening…",
@@ -25,7 +27,14 @@ def status_text(state: str) -> str:
     return STATE_TEXT.get(state, STATE_TEXT["idle"])
 
 
-def button_text(listening: bool) -> str:
+def button_text(listening: bool, hands_free: bool = False) -> str:
+    """In hands-free mode the button is not the way in -- speaking is.
+
+    Showing "Start Listening" when the microphone is already open would be a
+    lie, and clicking it would do nothing, which is worse than no button.
+    """
+    if hands_free:
+        return "Listening — just speak"
     return "Stop Listening" if listening else "Start Listening"
 
 
@@ -36,16 +45,19 @@ class AssistantWindow:
     and no event loop.
     """
 
-    def __init__(self, talker, on_quit=None, session_runner=None):
+    def __init__(self, talker, on_quit=None, session_runner=None,
+                 hands_free: bool = False):
         self._talker = talker
+        self._hands_free = hands_free
         self._on_quit = on_quit
         self._session_runner = session_runner
         self._state = "idle"
-        self._last = "Click Start Listening, then speak."
+        self._last = "Just speak — it is listening."
         self._window = None
         self._button = None
         self._status = None
         self._transcript = None
+        self._meter = None
 
     def set_state(self, state: str) -> None:
         self._state = state
@@ -67,6 +79,8 @@ class AssistantWindow:
             self.set_last_exchange(f"Error: {payload}")
 
     def toggle(self) -> None:
+        if self._hands_free:
+            return  # nothing to toggle: the microphone is always open
         if self._talker.is_listening:
             self._talker.stop_listening()
             self.set_state("thinking")
@@ -80,7 +94,9 @@ class AssistantWindow:
         try:
             self._status.setStringValue_(status_text(self._state))
             self._transcript.setStringValue_(self._last[:300])
-            self._button.setTitle_(button_text(self._talker.is_listening))
+            self._button.setTitle_(
+                button_text(self._talker.is_listening, self._hands_free)
+            )
         except Exception:
             pass  # a UI refresh must never take down a voice turn
 
@@ -129,7 +145,15 @@ class AssistantWindow:
         status.setFont_(NSFont.boldSystemFontOfSize_(16))
         status.setStringValue_(status_text(self._state))
 
-        transcript = NSTextField.alloc().initWithFrame_(NSMakeRect(20, 55, 340, 60))
+        meter = NSTextField.alloc().initWithFrame_(NSMakeRect(20, 95, 340, 22))
+        meter.setEditable_(False)
+        meter.setBezeled_(False)
+        meter.setDrawsBackground_(False)
+        meter.setFont_(NSFont.monospacedSystemFontOfSize_weight_(13, 0))
+        meter.setTextColor_(NSColor.systemGreenColor())
+        meter.setStringValue_(level_bar(0.0))
+
+        transcript = NSTextField.alloc().initWithFrame_(NSMakeRect(20, 45, 340, 45))
         transcript.setEditable_(False)
         transcript.setBezeled_(False)
         transcript.setDrawsBackground_(False)
@@ -138,18 +162,38 @@ class AssistantWindow:
         transcript.setStringValue_(self._last)
 
         button = NSButton.alloc().initWithFrame_(NSMakeRect(20, 15, 340, 32))
-        button.setTitle_(button_text(False))
+        button.setTitle_(button_text(False, self._hands_free))
+        button.setEnabled_(not self._hands_free)
         button.setBezelStyle_(1)
         button.setTarget_(self._handler)
         button.setAction_("toggle:")
 
         view = win.contentView()
         view.addSubview_(status)
+        view.addSubview_(meter)
         view.addSubview_(transcript)
         view.addSubview_(button)
 
         self._window, self._status = win, status
         self._transcript, self._button = transcript, button
+        self._meter = meter
+
+        # Poll the input level so the meter moves while you speak. A status
+        # word alone cannot distinguish a live microphone from a dead one --
+        # which is exactly how a working recording got reported as broken.
+        from Foundation import NSTimer
+
+        class _Ticker(NSObject):
+            def tick_(self, _timer):
+                try:
+                    outer._meter.setStringValue_(level_bar(outer._talker.level))
+                except Exception:
+                    pass
+
+        self._ticker = _Ticker.alloc().init()
+        NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            0.1, self._ticker, "tick:", None, True
+        )
 
         win.makeKeyAndOrderFront_(None)
         app.activateIgnoringOtherApps_(True)

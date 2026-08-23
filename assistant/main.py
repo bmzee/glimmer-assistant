@@ -142,7 +142,15 @@ def build_voice_session(cfg, platform, *, stt=None, tts=None, ptt=None):
         from assistant.voice.audio import DoubleTapToggle, HotkeyPushToTalk
         from assistant.voice.click import ClickToTalk
 
-        if cfg.voice_activation == "click":
+        if cfg.voice_activation == "listen":
+            from assistant.voice.vad import VoiceActivityCapture
+
+            ptt = VoiceActivityCapture(
+                min_seconds=cfg.voice_min_utterance_seconds,
+                speech_level=cfg.voice_speech_level,
+                silence_seconds=cfg.voice_silence_seconds,
+            )
+        elif cfg.voice_activation == "click":
             # No global hotkey, so no Input Monitoring required.
             ptt = ClickToTalk(
                 min_seconds=cfg.voice_min_utterance_seconds,
