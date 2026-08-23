@@ -13,7 +13,7 @@ from pathlib import Path
 
 from assistant.tools.adapters.base import PlatformAdapter
 from assistant.tools.registry import RiskTier
-from assistant.tools.system import make_system_tools
+from assistant.tools.system import CAPTURE_SUBDIR, make_system_tools
 
 
 class FakeAdapter(PlatformAdapter):
@@ -103,11 +103,21 @@ def test_set_volume_rejects_non_numeric(tmp_path: Path):
     assert adapter.calls == []
 
 
-def test_screenshot_writes_inside_an_allowed_root(tmp_path: Path):
+def test_screenshot_saves_bare_filename_into_capture_folder(tmp_path: Path):
+    """A plain 'take a screenshot' must keep working: a bare file name lands
+    in the dedicated capture folder, created on demand."""
     adapter = FakeAdapter("saved")
-    out = tools_for(tmp_path, adapter)["screenshot"].func(
-        {"path": str(tmp_path / "shot.png")}
-    )
+    out = tools_for(tmp_path, adapter)["screenshot"].func({"path": "shot.png"})
+    assert not out.startswith("ERROR:")
+    expected = tmp_path.resolve() / CAPTURE_SUBDIR / "shot.png"
+    assert adapter.calls == [("screenshot", str(expected))]
+    assert expected.parent.is_dir()
+
+
+def test_screenshot_accepts_absolute_path_inside_capture_folder(tmp_path: Path):
+    adapter = FakeAdapter("saved")
+    target = tmp_path / CAPTURE_SUBDIR / "shot.png"
+    out = tools_for(tmp_path, adapter)["screenshot"].func({"path": str(target)})
     assert not out.startswith("ERROR:")
     assert adapter.calls[0][0] == "screenshot"
 
@@ -122,10 +132,101 @@ def test_screenshot_refuses_paths_outside_allowed_roots(tmp_path: Path):
 
 def test_screenshot_refuses_traversal_escape(tmp_path: Path):
     adapter = FakeAdapter()
-    escape = str(tmp_path / ".." / ".." / "escape.png")
-    out = tools_for(tmp_path, adapter)["screenshot"].func({"path": escape})
+    out = tools_for(tmp_path, adapter)["screenshot"].func({"path": "../escape.png"})
     assert out.startswith("ERROR:")
     assert adapter.calls == []
+
+
+def test_screenshot_confined_to_capture_folder(tmp_path: Path):
+    """Being inside an allowed root is no longer enough: injected content must
+    not be able to aim the write primitive at arbitrary user documents."""
+    adapter = FakeAdapter()
+    out = tools_for(tmp_path, adapter)["screenshot"].func(
+        {"path": str(tmp_path / "Documents" / "thesis.png")}
+    )
+    assert out.startswith("ERROR:")
+    assert adapter.calls == []
+
+
+def test_screenshot_refuses_non_png_suffix(tmp_path: Path):
+    """actions.jsonl, .zshrc, thesis.docx: every non-.png target is refused
+    before the adapter runs."""
+    adapter = FakeAdapter()
+    tools = tools_for(tmp_path, adapter)
+    for name in ("shot.jpg", "actions.jsonl", "noext"):
+        target = str(tmp_path / CAPTURE_SUBDIR / name)
+        assert tools["screenshot"].func({"path": target}).startswith("ERROR:")
+    assert adapter.calls == []
+
+
+def test_screenshot_refuses_to_overwrite_existing_file(tmp_path: Path):
+    """screencapture truncates its target; an existing file must never be
+    clobberable, even inside the capture folder."""
+    adapter = FakeAdapter()
+    existing = tmp_path / CAPTURE_SUBDIR / "shot.png"
+    existing.parent.mkdir(parents=True)
+    existing.write_bytes(b"prior contents")
+    out = tools_for(tmp_path, adapter)["screenshot"].func({"path": str(existing)})
+    assert out.startswith("ERROR:")
+    assert adapter.calls == []
+    assert existing.read_bytes() == b"prior contents"
+
+
+def test_screenshot_denylist_refuses_protected_paths(tmp_path: Path):
+    """Defense in depth: even a capture dir misconfigured to contain the audit
+    log must not allow a write over it."""
+    adapter = FakeAdapter()
+    log = tmp_path / "actions.png"  # worst case: a log the suffix check would pass
+    tools = by_name(
+        make_system_tools(
+            adapter, [tmp_path], capture_dir=tmp_path, protected_paths=[log]
+        )
+    )
+    out = tools["screenshot"].func({"path": str(log)})
+    assert out.startswith("ERROR:")
+    assert "protected" in out
+    assert adapter.calls == []
+
+
+def test_screenshot_always_refuses_glimmer_config_dir(tmp_path: Path):
+    """~/.glimmer-assistant (audit log + config) is denied unconditionally,
+    even when the capture dir is (mis)configured to be all of home."""
+    adapter = FakeAdapter()
+    home = Path.home()
+    tools = by_name(make_system_tools(adapter, [home], capture_dir=home))
+    out = tools["screenshot"].func(
+        {"path": str(home / ".glimmer-assistant" / "evil.png")}
+    )
+    assert out.startswith("ERROR:")
+    assert "protected" in out
+    assert adapter.calls == []
+
+
+def test_build_loop_wires_configured_audit_log_into_denylist(
+    tmp_path: Path, monkeypatch
+):
+    """The finding's exact attack, end to end: a screenshot steered at the
+    configured actions log is refused as protected, not merely misplaced."""
+    from assistant.config import Config
+    from assistant.main import build_loop
+    from assistant.tools.adapters.mac import MacAdapter
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        MacAdapter, "screenshot", lambda self, path: (calls.append(path), "saved")[1]
+    )
+    cfg = Config(
+        allowed_roots=[str(tmp_path)],
+        log_path=str(tmp_path / "actions.jsonl"),
+        enable_web=False,
+        enable_apple=False,
+    )
+    loop = build_loop(cfg, lambda r: False, "darwin")
+    tools = {t.name: t for t in loop._registry.available("darwin")}
+    out = tools["screenshot"].func({"path": str(tmp_path / "actions.jsonl")})
+    assert out.startswith("ERROR:")
+    assert "protected" in out
+    assert calls == []
 
 
 def test_all_system_tools_are_darwin_scoped(tmp_path: Path):

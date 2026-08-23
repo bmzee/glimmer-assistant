@@ -28,7 +28,11 @@ def build_loop(cfg: Config, confirmer: Callable[[ConfirmRequest], bool], platfor
         adapter = MacAdapter()
         for tool in make_app_tools(adapter, roots):
             registry.register(tool)
-        for tool in make_system_tools(adapter, roots):
+        # The configured audit-log path joins the screenshot denylist so tool
+        # writes can never destroy the action record (Rule-of-Two's evidence).
+        for tool in make_system_tools(
+            adapter, roots, protected_paths=[Path(cfg.log_path)]
+        ):
             registry.register(tool)
         registry.register(make_shell_tool(roots))
 
