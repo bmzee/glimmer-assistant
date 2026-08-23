@@ -62,7 +62,22 @@ The Qwen recommendation survives this correction, because the deciding factors b
 
 `docs/spec.md` §2 specifies the Ollama **MLX engine with the DFlash speculative-decoding drafter**. Both models here were pulled as plain GGUF tags. `ollama ps` confirms 100% GPU placement, so this is a build issue, not a placement issue.
 
-Pulling `muse-glimmer:30b-mlx` gave **22.7 vs 20.0 tok/s** against the plain build in the same burst window — suggestive but a single run, inside the run-to-run spread seen above, so treat it as **unconfirmed**. That tag carries MLX but *not* DFlash. The spec-aligned Apple Silicon build is `muse-glimmer:30b-mlx-bf16-dflash`, which remains **untested**. Note the tradeoff before assuming it wins: bf16 at 30B is ~60 GB versus ~18 GB for q4, and generation here is memory-bandwidth-bound, so DFlash's ~1.7× may not cover a 3.3× increase in bytes moved per token.
+**Resolved: the MLX build was run through the full eval suite (2026-08-23) and scores 10/10, the same as the other two — but does not fix the wandering.**
+
+| | eval | wall clock | `no-tool-fits` |
+|---|---:|---:|---:|
+| `qwen3.8:27b` | 10/10 | **4.2 min** | 16.1s, **0 tools** |
+| `muse-glimmer:30b-mlx` | 10/10 | 9.0 min | **148.8s, 3 tools** |
+
+Twice the wall clock overall, and **9× on the open-ended prompt**. Asked to *"order me a pizza from the shop down the road"*, it called `list_dir`, `list_windows`, and `open_app` — and the audit log shows what that last one did:
+
+```json
+{"tool": "open_app", "args": {"name": "Notes"}, "tier": 1, "decision": "auto"}
+```
+
+**It launched Notes.app.** Not an unnecessary read — an unnecessary *action*, visible on the user's screen, auto-approved because Tier 1 has no confirmation (see `docs/security-audit.md`). That is a materially worse failure than verbosity, and it is behavioural: the MLX runtime does not touch it.
+
+Pulling `muse-glimmer:30b-mlx` also gave **22.7 vs 20.0 tok/s** against the plain build in the same burst window — a single run, inside the run-to-run spread seen above, so the throughput edge remains **unconfirmed** and is beside the point. That tag carries MLX but *not* DFlash. The spec-aligned Apple Silicon build is `muse-glimmer:30b-mlx-bf16-dflash`, which remains **untested**. Note the tradeoff before assuming it wins: bf16 at 30B is ~60 GB versus ~18 GB for q4, and generation here is memory-bandwidth-bound, so DFlash's ~1.7× may not cover a 3.3× increase in bytes moved per token.
 
 **Resolved:** the earlier ~6 tok/s figures were a throttling artifact. On AC with `powermode 0` and a rested GPU, Glimmer reaches **20.5 tok/s** — in line with what an 18 GB model on an M3 Max should deliver, and ~3.4× the throttled reading. The hardware was never the problem and neither was the build.
 
