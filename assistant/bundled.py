@@ -18,6 +18,11 @@ import traceback
 from pathlib import Path
 
 from assistant.config import Config
+from assistant.capabilities import (
+    capability_report,
+    format_report,
+    missing_required,
+)
 from assistant.preflight import (
     blocking_problems,
     format_problems,
@@ -58,6 +63,7 @@ def bundled_main(
     show=show_dialog,
     run=None,
     log_path: Path | None = None,
+    capabilities=None,
 ) -> int:
     with _tee_to(log_path):
         checks = checks if checks is not None else run_preflight(cfg)
@@ -72,6 +78,20 @@ def bundled_main(
                 + problems,
             )
             return 1
+
+        # Permissions are the other half of "why is nothing happening?".
+        # A denied grant is invisible: the hotkey just does nothing, a calendar
+        # read just fails. Report capability-first -- the user cares that
+        # "read your email" is unavailable, not which TCC grant is missing.
+        caps = capabilities if capabilities is not None else capability_report()
+        print("capabilities:\n" + format_report(caps))
+        blocked = missing_required(caps)
+        if blocked:
+            show(
+                f"{_TITLE} needs permission",
+                "Glimmer Assistant is running but cannot hear you yet:\n\n"
+                + format_report(caps),
+            )
 
         if run is None:
             from assistant.main import build_voice_session
