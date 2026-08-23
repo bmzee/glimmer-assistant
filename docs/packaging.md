@@ -67,15 +67,71 @@ microphone dialog (voice mode).
   distribution already installed as a pytest/setuptools dependency; a local
   module of that name would shadow it.
 
+## Two builders
+
+`appbundle/build_app.py` writes a **launcher** — a shell script that `exec`s
+your dev venv. Fast to build, but it stops working the moment that venv moves,
+and it is not something you can hand to anyone. Useful during development.
+
+`appbundle/build_dist.py` writes a **self-contained app**: embedded Python and
+every dependency, ~1.24 GB, draggable to `/Applications` and runnable on a
+machine that has never seen this repo.
+
+```bash
+python -m appbundle.build_dist --dmg
+```
+
+Produces `dist/Glimmer Assistant.app` and a **0.31 GB `.dmg`** with a
+drag-to-Applications symlink.
+
+### What is still not bundled, and why
+
+- **Ollama and its model.** The model alone is ~18 GB and Ollama is its own
+  app. No bundler solves that. `assistant/preflight.py` detects it and says so.
+- **Voice models (~1 GB)** — downloaded to `~/.cache` on first use, by design.
+- **Playwright's Chromium (~150 MB)** — lives in `~/Library/Caches`.
+
+### Two failures worth recording
+
+**`--options runtime` makes the app unlaunchable.** Hardened runtime enables
+library validation; a PyInstaller bundle loads an embedded `Python.framework`
+signed separately, and two independently ad-hoc-signed binaries share no Team
+ID to match on:
+
+```
+Failed to load Python shared library ... Contents/Frameworks/Python
+... (non-platform) have different Team IDs
+```
+
+The app exits 255 before running a line of Python. Hardened runtime is only a
+*notarization* requirement, and notarization needs a Developer ID an ad-hoc
+build does not have — so the flag bought nothing and broke everything. A test
+guards against re-adding it.
+
+**`language_tags` and `segments` must be collected explicitly.** They are
+data-only transitive deps of `phonemizer`. Without them the frozen app raises a
+`FileNotFoundError` naming *neither* package — it reads like an espeak failure
+and sends you hunting the wrong dylib. The symptom was three packages away from
+the cause.
+
+## Startup, when nothing can be printed
+
+`LSUIElement` means no Dock icon and a bundle has no terminal, so every
+`print()` goes nowhere: a missing Ollama, an unpulled model and a crash all
+look identical — the app appears to do nothing.
+
+`assistant/preflight.py` turns each into a named problem with a remedy, shown
+in a dialog via `osascript`. Blocking problems (no Ollama, no model) stop
+startup; warnings (voice models that will download themselves) do not. Crashes
+and tracebacks go to `~/.glimmer-assistant/app.log`.
+
 ## Known limitations
 
-- **The interpreter path is baked in at build time.** Build with the venv you
-  intend to run, and rebuild if it moves — the bundle is a launcher, not a
-  self-contained application. A relocated or deleted venv produces an app that
-  silently fails to start.
-- **Not a distributable artifact.** No embedded Python, no Developer ID
-  signature, no notarization. This solves the permissions problem, not
-  distribution.
+- **Not notarized.** Ad-hoc signing works on the machine that built it. Handing
+  the `.dmg` to someone else triggers a Gatekeeper warning; clearing that needs
+  a Developer ID certificate ($99/yr Apple Developer account) plus
+  `notarytool` submission. Only then should `--options runtime` be re-added.
+- **Single architecture.** Built arm64-only, matching the host.
 - **Screen Recording has no `Info.plist` key.** Unlike Microphone and Apple
   Events, it is granted only on first use. `screenshot` maps the resulting
   opaque `could not create image from display` error to a hint naming the
