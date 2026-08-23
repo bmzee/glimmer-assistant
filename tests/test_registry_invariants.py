@@ -21,6 +21,7 @@ from assistant.main import build_loop
 # Such a tool MUST be untrusted=True so the loop datamarks it.
 EXPECTED_UNTRUSTED = {
     "read_file",           # a downloaded file launders external content
+    "list_dir",            # filenames are attacker-chosen (one dropped file = injected text)
     "read_page",
     "search_web",
     "open_url",            # returns the page title (attacker-controlled)
@@ -122,7 +123,7 @@ def test_every_registered_tool_is_classified(tmp_path):
     tools = all_tools(tmp_path)
     # Tools that legitimately neither return external content nor transmit.
     NEITHER = {
-        "list_dir", "open_app", "open_path",
+        "open_app", "open_path",
         # System control: mutate local state only, return no external content.
         "quit_app", "focus_window", "set_volume",
         "screenshot",  # returns the saved path, not image content

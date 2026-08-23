@@ -30,6 +30,10 @@ def make_files_tools(allowed_roots: list[Path]) -> list[Tool]:
             risk_tier=RiskTier.AUTO,
             platforms=("darwin", "win32"),
             func=list_dir,
+            # Filenames are attacker-chosen: one file dropped under an allowed
+            # root with an instruction-encoding name would otherwise enter the
+            # planning context as trusted text without tainting the session.
+            untrusted=True,
         ),
         Tool(
             name="read_file",
