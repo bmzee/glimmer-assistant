@@ -64,7 +64,7 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 | 2. Untrusted-content quarantine, datamarked | ✅ | `security/quarantine.py`, unguessable per-call nonce. |
 | 2. Outbound elevation after untrusted ingest | ✅ | `security/trust.py` + `gate.py`; enforced in the gate, not the prompt. |
 | 3. Risk tiers 0–3 | ✅ | `RiskTier`; NEVER refused before elevation is computed. |
-| 3. Tier 1 **async-undo window**; deletes to Trash | ⚠️ | Tiers exist and no tool calls `rm`, but there is **no undo mechanism and no notification** — Tier 1 currently behaves as auto. Nothing in the registry is Tier 1 today, so this is latent, not live. |
+| 3. Tier 1 **async-undo window**; deletes to Trash | ✗ | Tiers exist and no tool calls `rm`, but there is **no undo mechanism and no notification**, so `gate.py:33` auto-approves Tier 1. **This is LIVE, not latent:** `open_app`, `focus_window`, `set_volume`, `open_url` are UNDO and execute unconfirmed. An earlier revision of this document claimed no tool was Tier 1 — that was wrong. |
 | 4. Canonicalize + allowlist model-derived paths | ✅ | `security/paths.py`, `resolve_safe`. |
 | 4. **Pin MCP tool definitions; refuse silent changes** | ✗ | Not implemented. |
 | 5. JSONL audit log with result hash | ✅ | `security/log.py`; eval ground truth reads from it. |
@@ -93,8 +93,12 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 **Security clauses still not met:**
 1. **MCP definition pinning** (§8.4) — unmet, though latent: no MCP server is
    adopted, so nothing is currently unpinned in practice.
-2. **Tier 1 undo window** (§8.3) — latent: no tool is Tier 1 today. `quit_app`
-   was made CONFIRM rather than UNDO precisely because this is missing.
+2. **Tier 1 undo window** (§8.3) — **unmet and live.** Four tools (`open_app`,
+   `focus_window`, `set_volume`, `open_url`) are UNDO and therefore run with no
+   confirmation and no undo. A red-team audit found this; a previous revision of
+   this document asserted no tool was Tier 1, which was false. `quit_app` and
+   `open_path` were promoted to CONFIRM rather than relying on the missing
+   mechanism. See `docs/security-audit.md`.
 
 **Acceptance gate not met:**
 3. **Voice latency 2.59s vs 2.5s** — 0.09s over, cause understood, and the one
