@@ -73,6 +73,18 @@ microphone dialog (voice mode).
 your dev venv. Fast to build, but it stops working the moment that venv moves,
 and it is not something you can hand to anyone. Useful during development.
 
+> **Fixed 2026-08-24.** This builder used to launch `-m assistant --voice` — the
+> *terminal* entry point — so the bundle skipped preflight, the capability
+> report, the window, the crash dialog and the log tee, all of which live in
+> `assistant.bundled`. It also set `LSUIElement: True`, hiding the Dock icon and
+> stopping the process from reliably raising the microphone TCC prompt.
+> Double-clicking the result gave an invisible process with no UI and no
+> diagnostics. `build_dist.py` was always correct; only this path was affected.
+>
+> A separate defect made **both** builders unable to transcribe: STT shelled out
+> to `ffmpeg`, which is not on the PATH a GUI-launched process inherits. Any
+> bundle built before this date cannot hear you — rebuild.
+
 `appbundle/build_dist.py` writes a **self-contained app**: embedded Python and
 every dependency, ~1.24 GB, draggable to `/Applications` and runnable on a
 machine that has never seen this repo.
