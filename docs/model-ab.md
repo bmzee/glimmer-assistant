@@ -1,5 +1,56 @@
 # Model A/B: Muse-Glimmer-30B vs Qwen3.8-27B
 
+> # ⚠️ Superseded: this A/B raced two of the three installed models
+>
+> **Date:** 2026-08-24 · same host, AC power, `powermode 0`
+>
+> `nemotron-3.5-lightning:30b-a3b-q4_K_M` was installed 11 days before this
+> project started and was never entered into the comparison below. It wins,
+> and not narrowly.
+>
+> It is a **mixture-of-experts: 32.9B total, ~3B ACTIVE per token**, against
+> Qwen's **dense 27B** where every token pays all 27B of weights. That is an
+> architectural difference, not a tuning one — which is why no amount of
+> prompt engineering, `reasoning_effort` tuning or streaming work was ever
+> going to close it, and why months of latency work never found it.
+>
+> ## Three-way race, same harness, all 10/10
+>
+> | | decode | eval suite | correct |
+> |---|---:|---:|---:|
+> | **`nemotron-3.5-lightning:30b-a3b`** | **86.8 tok/s** | **155.9s** | 10/10 |
+> | `qwen3.8:27b` (previous default) | 14.8 tok/s | 285.1s | 10/10 |
+> | `muse-glimmer:30b-mlx` | 29.3 tok/s | 332.6s | 10/10 |
+>
+> Accuracy does not choose between them — all three pass every task, including
+> `refuse-destructive` and `resist-injection`. Only speed does.
+>
+> Per-task, Nemotron wins every task but one (`calendar-read`, where AppleScript
+> dominates the wall clock, not the model). On the LLM-bound tasks the gap is
+> much larger than the 1.83x suite total suggests — `no-tool-fits` goes
+> 23.4s → 3.1s, a **7.5x** difference.
+>
+> ## What the user actually waits for
+>
+> Warm, through the real agent loop, to the first spoken word:
+>
+> | turn | qwen3.8:27b | nemotron | |
+> |---|---:|---:|---:|
+> | "open the calculator" | 9.2s | **4.3s** | 2.1x |
+> | "what can you help me with?" | 11.0s | **5.8s** | 1.9x |
+> | "what is on my desktop?" | 19.6s | **5.4s** | 3.7x |
+>
+> ## Licence
+>
+> NVIDIA Open Model License — commercially usable, derivative models permitted,
+> but **not Apache 2.0**, which was part of the original argument for
+> Muse-Glimmer. Both alternatives remain one config line away and are equally
+> correct, just slower.
+>
+> **Everything below this box is the two-way A/B it replaces.** Its behavioural
+> findings on tool discipline and injection resistance still stand; its verdict
+> does not.
+
 **Date:** 2026-08-22
 **Host:** MacBook Pro, Apple M3 Max, 128 GB, macOS 26.6.2
 **Ollama:** 0.32.15

@@ -80,12 +80,40 @@ def test_usage_strings_say_why_not_just_what(tmp_path):
         assert len(p[key]) > 40, f"{key} is too terse to inform consent"
 
 
-def test_launcher_invokes_the_configured_interpreter_and_module(tmp_path):
-    app = build(tmp_path, python="/opt/venv/bin/python", args=["--voice"])
+def test_launcher_invokes_the_configured_interpreter(tmp_path):
+    app = build(tmp_path, python="/opt/venv/bin/python")
     script = (app / "Contents" / "MacOS" / "glimmer-assistant").read_text()
     assert "/opt/venv/bin/python" in script
-    assert "assistant" in script
-    assert "--voice" in script
+
+
+def test_launcher_starts_the_bundled_entry_point_not_the_bare_module(tmp_path):
+    """`-m assistant` is a terminal entry point and is invisible from a .app.
+
+    It skips preflight, the capability report, the window, the crash dialog and
+    the log tee -- all of which live in assistant.bundled. Double-clicking a
+    bundle built that way gives a process with no UI and no diagnostics, which
+    is indistinguishable from nothing happening.
+
+    The old assertion here was `"assistant" in script`, which is satisfied by
+    the broken string, so this shipped green.
+    """
+    script = (build(tmp_path) / "Contents" / "MacOS" / "glimmer-assistant").read_text()
+
+    assert "-m assistant.bundled" in script, f"launcher does not use bundled entry: {script}"
+
+
+def test_launcher_passes_no_argv_because_the_bundled_entry_takes_none(tmp_path):
+    """assistant.bundled.main() reads its config; a stray --voice would raise."""
+    script = (build(tmp_path) / "Contents" / "MacOS" / "glimmer-assistant").read_text()
+
+    assert "--voice" not in script
+
+
+def test_the_app_is_not_a_background_agent(tmp_path):
+    """LSUIElement hides the Dock icon AND blocks the microphone TCC prompt --
+    the bug that made the app record silence. build_dist.py already sets this
+    False with the reasoning; build_app.py never got the same fix."""
+    assert plist_of(build(tmp_path)).get("LSUIElement") is not True
 
 
 def test_launcher_quotes_paths_containing_spaces(tmp_path):

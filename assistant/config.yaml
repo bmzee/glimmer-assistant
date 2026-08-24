@@ -1,8 +1,9 @@
 # llm_base_url: http://localhost:11434/v1
-# llm_model: qwen3.8:27b        # default; see docs/model-ab.md for the A/B
-# llm_model: muse-glimmer:30b   # alternative: equally correct, faster per token,
-#                               # but chattier + calls tools it doesn't need, so
-#                               # ~3x more wall time per task. Not a speed deficit.
+# llm_model: nemotron-3.5-lightning:30b-a3b-q4_K_M   # default; see docs/model-ab.md
+# llm_model: qwen3.8:27b        # alternative: also 10/10, but dense 27B, so
+#                               # 14.8 tok/s against Nemotron's 86.8.
+# llm_model: muse-glimmer:30b-mlx  # also 10/10; slowest of the three on the
+#                               # full eval (332.6s vs 155.9s).
 # max_iterations: 15
 # tool_result_max_chars: 16000
 # allowed_roots: ["~"]

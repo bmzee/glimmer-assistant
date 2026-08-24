@@ -5,6 +5,40 @@
 **Model under test:** `qwen3.8:27b` (current default)
 **Gate:** `docs/spec.md` §9 — *PTT release → first TTS audio ≤ 2.5s p50 for a no-tool answer.*
 
+## Update 2026-08-24: the cause was the model, and it has been changed
+
+Everything below diagnosed the wait as reasoning tokens and concluded there was
+no lever left. That was wrong in one specific way: it never questioned the
+model. `docs/model-ab.md` raced two of the three models installed on this
+machine. The third, `nemotron-3.5-lightning:30b-a3b`, is a mixture-of-experts —
+~3B active per token against Qwen's dense 27B — and decodes at **86.8 tok/s vs
+14.8**, at the same 10/10 eval score.
+
+Two other fixes landed with it: a completed action is now confirmed straight
+from its tool result rather than by a second model call (that call was 3.45s to
+restate an action that took 80ms), and the weights are preloaded at startup so
+the first command does not pay a 16-29s reload.
+
+### The §9 gate, re-measured — both cases, deliberately
+
+| case | p50 to first audio | gate |
+|---|---:|---|
+| "say hello in one short sentence" (what 2.59s measured) | **1.74s** | ✅ passes |
+| "what can you help me with?", full 20-tool schema | **5.23s** | ❌ misses |
+
+Reporting only the first number is exactly how this document came to describe a
+~10x miss as 0.09s. The easy case now clears the gate; a real question does not.
+
+### Corrections to the numbers below
+
+- **14.5–23.9s was measured COLD** — fresh loop and cold prefix cache on every
+  turn. Warm Qwen was 9.2–19.6s. Both are now historical.
+- **`reasoning_effort` is exhausted, not merely rejected.** "low" was never
+  tested and turns out to be *slower* than the default (17.2s vs 9.0s): it gets
+  more verbose, not less.
+- **Ollama's prefix cache does work** — prefill collapses 3.33s → 0.18s on a
+  repeated prompt — but alternating prompt shapes evicts it.
+
 ## Correction: 2.59s is not what users experience
 
 The 2.59s below is real but **unrepresentative**. It was measured with the

@@ -8,9 +8,11 @@ from assistant.config import Config, load_config
 def test_defaults_without_file():
     cfg = load_config(None)
     assert cfg.llm_base_url == "http://localhost:11434/v1"
-    # Default selected by the A/B in docs/model-ab.md (both 10/10; Qwen chosen for
-    # tool discipline, not speed -- Glimmer is actually faster per token)
-    assert cfg.llm_model == "qwen3.8:27b"
+    # Default selected by the three-way race in docs/model-ab.md. All three
+    # installed models score 10/10, so speed decides: Nemotron is a 3B-active
+    # MoE and decodes at 86.8 tok/s against Qwen's 14.8, which is the
+    # difference between a 5s and a 20s wait for the user.
+    assert cfg.llm_model == "nemotron-3.5-lightning:30b-a3b-q4_K_M"
     assert cfg.max_iterations == 15
     assert cfg.tool_result_max_chars == 16000
     assert cfg.allowed_roots == ["~"]

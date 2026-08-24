@@ -57,13 +57,20 @@ def _launcher_script(python: str, module: str, args: list[str]) -> str:
 def build_bundle(
     app_path: Path,
     python: str | None = None,
-    module: str = "assistant",
+    # assistant.bundled, NOT "assistant": the bare module is the terminal entry
+    # point, and from a .app there is no terminal. It skips preflight, the
+    # capability report, the window, the crash dialog and the log tee -- so a
+    # bundle built that way is a process with no UI and no diagnostics, which
+    # from the outside is indistinguishable from nothing happening at all.
+    # build_dist.py already gets this right; this path did not.
+    module: str = "assistant.bundled",
     args: list[str] | None = None,
     sign: bool = False,
 ) -> Path:
     app_path = Path(app_path)
     python = python or sys.executable
-    args = list(args if args is not None else ["--voice"])
+    # bundled.main() takes no argv -- it reads the config for activation mode.
+    args = list(args if args is not None else [])
 
     contents = app_path / "Contents"
     macos = contents / "MacOS"
@@ -82,9 +89,11 @@ def build_bundle(
         "CFBundleVersion": VERSION,
         "CFBundlePackageType": "APPL",
         "LSMinimumSystemVersion": "13.0",
-        # Background agent: a push-to-talk assistant should not own a Dock icon
-        # or steal focus when it starts.
-        "LSUIElement": True,
+        # NOT a background agent. LSUIElement hides the Dock icon, but it also
+        # stops the process reliably presenting a TCC prompt -- so the
+        # microphone dialog never appeared and the app recorded silence. It
+        # also hides the window the user starts and stops listening from.
+        "LSUIElement": False,
         "NSMicrophoneUsageDescription": MIC_USAGE,
         "NSAppleEventsUsageDescription": APPLE_EVENTS_USAGE,
     }
@@ -136,7 +145,10 @@ def main(argv: list[str] | None = None) -> int:
     app = build_bundle(
         out,
         python=ns.python,
-        args=[] if ns.text_mode else ["--voice"],
+        # main.py selects text mode by the ABSENCE of --voice, so text mode is
+        # the bare module with no argv at all.
+        module="assistant" if ns.text_mode else "assistant.bundled",
+        args=[],
         sign=not ns.no_sign,
     )
     print(f"built {app}")

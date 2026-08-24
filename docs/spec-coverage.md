@@ -14,7 +14,7 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 
 | Clause | Status | Evidence |
 |---|---|---|
-| Muse-Glimmer-30B via Ollama | ⚠️ | Default is `qwen3.8:27b`. The spec's own **contender clause** required an A/B before shipping; both scored 10/10 and Qwen won on tool discipline. `docs/model-ab.md`. |
+| Muse-Glimmer-30B via Ollama | ⚠️ | Default is `nemotron-3.5-lightning:30b-a3b-q4_K_M`. The spec's **contender clause** required an A/B before shipping; the original A/B raced only two of the three installed models. In the three-way re-run all three score 10/10, so speed decides: Nemotron is a mixture-of-experts (~3B active/token) and decodes at 86.8 tok/s against Glimmer's 29.3 and Qwen's 14.8. Licence is NVIDIA Open Model, not Apache 2.0. `docs/model-ab.md`. |
 | K-Quant-Dynamic quantization | ✅ | q4-class GGUF, ~18 GB. |
 | **DFlash speculative-decoding drafter** | ✗ | Never enabled. Plain GGUF build. `muse-glimmer:30b-mlx-bf16-dflash` untested — and bf16@30B is ~60 GB vs 18 GB q4, so on bandwidth-bound hardware DFlash's ~1.7× may not cover 3.3× more bytes/token. |
 | Gate: structured output on MLX engine, else pin GGUF | ✅ | Bug does not reproduce; both models returned schema-valid JSON. No pin needed. `docs/model-ab.md`. |
@@ -73,18 +73,28 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 
 | Clause | Status | Evidence |
 |---|---|---|
-| TDD throughout | ✅ | 285 tests; guard tests proven to fail on their specific bug. |
+| TDD throughout | ✅ | 514 tests; guard tests proven to fail on their specific bug. |
 | Unit: tools, schema round-trip, gate, sandbox profile | ✅ | Including write-outside-scope and network-egress denial. |
 | Integration: canned responses; MCP against pinned versions | ⚠️ | Canned-response integration ✅. MCP-against-pinned-server ✗ (no server adopted). |
 | Model gate (a): structured output | ✅ | Passes; no GGUF pin needed. |
 | Model gate (b): 10 evals vs both models | ✅ | 10/10 both. `docs/model-ab.md`. |
-| **Voice: ≤2.5s p50 to first TTS audio** | ✗ | **2.59s — misses by 0.09s.** `docs/latency.md`. Suppressing reasoning would clear it but was measured and rejected (10/10→9/10 plus `</think>` leaking into speech). |
+| **Voice: ≤2.5s p50 to first TTS audio** | ⚠️ | **Passes on the easy case, misses on a real one.** "say hello in one short sentence": **1.74s p50** ✅. "what can you help me with?" with the full 20-tool schema: **5.23s p50** ❌. Both are reported because quoting only the first is how this document previously described a ~10x miss as 0.09s. Improved ~4x by switching to a mixture-of-experts model; see `docs/model-ab.md`. |
 
 ---
 
 ## Summary of real gaps
 
 **Closed in this pass:**
+- **Voice input never worked from the packaged app at all.** STT wrote a temp
+  WAV and let `parakeet_mlx` decode it by spawning `ffmpeg`, which is not on the
+  PATH a GUI-launched process inherits. Every turn raised, and the user heard
+  "Sorry, something went wrong." Now transcribes from the in-memory array. This
+  was invisible to the test suite: the STT tests mocked `transcribe` and
+  asserted the `.wav` path, pinning the bug in place.
+- **`build_app.py` produced a bundle with no UI**: it launched the terminal
+  entry point, skipping preflight, the capability report, the window and the
+  crash dialog, with `LSUIElement: True` hiding the Dock icon and suppressing
+  the microphone prompt. `build_dist.py` was already correct.
 - PlatformAdapter completed (quit/list-windows/focus/volume/screenshot). Two
   bugs found only by live testing — both AppleScript, both invisible to the
   twelve passing unit tests. See the commit for the -1700/-1719 detail.
@@ -101,8 +111,13 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
    mechanism. See `docs/security-audit.md`.
 
 **Acceptance gate not met:**
-3. **Voice latency 2.59s vs 2.5s** — 0.09s over, cause understood, and the one
-   available fix measured and rejected (`docs/latency.md`).
+3. **Voice latency: 1.74s p50 on the easy case (passes), 5.23s on a real
+   question (misses).** Two earlier revisions of this document got this wrong in
+   opposite directions: first reporting 2.59s as a 0.09s miss, then 14.5–23.9s
+   measured cold. The actual cause was never reasoning tokens alone — it was the
+   model. `docs/model-ab.md` had raced two of the three installed models; the
+   unraced one is a mixture-of-experts (~3B active vs dense 27B) and decodes 5.9x
+   faster at the same 10/10. (`docs/latency.md`)
 
 **Deliberately not built** (documented, with rationale): DFlash, streaming STT during hold, TTS fallbacks, AXUIElement reader, App Intents, MCP server adoption, Windows adapter.
 
