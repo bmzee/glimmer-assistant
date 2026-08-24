@@ -8,14 +8,20 @@ def to_model_rate(audio, sample_rate: int, target_rate: int):
     it. Live capture asks CoreAudio for 16kHz so it usually needs nothing, but
     TTS output is 24kHz and another input device may deliver its own rate --
     dropping this along with the subprocess would trade a packaging bug for an
-    audio one. librosa is already in the tree as a parakeet_mlx dependency, so
-    this adds nothing to install.
+    audio one.
+
+    soxr, not librosa.resample. librosa is already in the tree as a
+    parakeet_mlx dependency so it looks free, but calling resample lazily
+    imports numba, llvmlite, scipy, pooch and joblib -- and PyInstaller does
+    not follow lazy imports, so the bundle would build clean and then fail at
+    runtime, in an app with no terminal to show why. soxr is what librosa uses
+    underneath anyway.
     """
     if int(sample_rate) == int(target_rate):
         return audio
-    import librosa
+    import soxr
 
-    return librosa.resample(audio, orig_sr=int(sample_rate), target_sr=int(target_rate))
+    return soxr.resample(audio, int(sample_rate), int(target_rate))
 
 
 class ParakeetSTT:

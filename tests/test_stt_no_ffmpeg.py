@@ -109,6 +109,37 @@ def test_audio_at_another_rate_is_resampled_rather_than_refused():
     )
 
 
+def test_resampling_does_not_drag_in_librosas_lazy_dependency_graph():
+    """`librosa.resample` looks free -- librosa is already a parakeet_mlx
+    dependency -- but calling it lazily imports numba, llvmlite, scipy, pooch
+    and joblib. PyInstaller does not follow lazy imports, so the bundle would
+    build clean and then fail at runtime on the one path that matters, in an
+    app that has no terminal to show the traceback. soxr does the same job with
+    none of that.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys, numpy as np;"
+        "from assistant.voice.stt import to_model_rate;"
+        "to_model_rate(np.zeros(32000, dtype='float32'), 32000, 16000);"
+        "heavy={'numba','llvmlite','scipy','pooch','joblib','librosa'};"
+        "print(sorted(heavy & {m.split('.')[0] for m in sys.modules}))"
+    )
+    out = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True)
+
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "[]", f"resampling pulled in heavy deps: {out.stdout.strip()}"
+
+
+def test_the_bundle_collects_the_resampler():
+    """A native extension PyInstaller has no reason to find on its own."""
+    from appbundle.build_dist import COLLECT_ALL
+
+    assert "soxr" in COLLECT_ALL
+
+
 def test_audio_already_at_the_model_rate_is_passed_through_untouched():
     """Resampling 16k->16k would cost time and add filter artefacts for nothing."""
     from assistant.voice.stt import to_model_rate

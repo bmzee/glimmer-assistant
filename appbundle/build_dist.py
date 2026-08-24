@@ -50,6 +50,7 @@ COLLECT_ALL = [
     "language_tags",    # data-only; its absence looks like an espeak failure
     "segments",
     "sounddevice",
+    "soxr",             # native resampler STT needs; nothing imports it eagerly
     "playwright",
 ]
 
