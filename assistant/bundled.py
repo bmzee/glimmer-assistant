@@ -18,6 +18,7 @@ import traceback
 from pathlib import Path
 
 from assistant.config import Config
+from assistant.llm.preload import preload_model
 from assistant.capabilities import (
     capability_report,
     format_report,
@@ -64,6 +65,7 @@ def bundled_main(
     run=None,
     log_path: Path | None = None,
     capabilities=None,
+    preload=preload_model,
 ) -> int:
     with _tee_to(log_path):
         checks = checks if checks is not None else run_preflight(cfg)
@@ -78,6 +80,14 @@ def bundled_main(
                 + problems,
             )
             return 1
+
+        # Load the weights now, while the user is still opening the app. Cold,
+        # the first command pays a 16-29s reload of a 17-25GB model -- and that
+        # is the command that decides whether they think this works at all.
+        try:
+            preload(cfg.llm_base_url, cfg.llm_model)
+        except Exception as e:  # never trade the whole app for a warm cache
+            print(f"model preload skipped: {e}")
 
         # Permissions are the other half of "why is nothing happening?".
         # A denied grant is invisible: the hotkey just does nothing, a calendar
