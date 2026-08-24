@@ -4,6 +4,7 @@ import hashlib
 import json
 
 from assistant.agent.compaction import compact, should_compact
+from assistant.agent.confirmations import confirmation_for
 from assistant.agent.prompts import SYSTEM_PROMPT
 from assistant.security.gate import PermissionGate
 from assistant.security.log import ActionLog
@@ -12,6 +13,16 @@ from assistant.security.trust import SessionTrust
 from assistant.tools.registry import RiskTier, ToolRegistry
 # Pure text handling (imports only `re`); no voice dependency is pulled in.
 from assistant.voice.streaming import SentenceAccumulator, split_sentences
+
+
+def _decoded_args(raw: str) -> dict:
+    """Arguments for phrasing only. Malformed JSON is _execute's problem to
+    report; here it just means there is nothing to build a sentence from."""
+    try:
+        decoded = json.loads(raw) if raw else {}
+    except json.JSONDecodeError:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
 
 
 class AgentLoop:
@@ -54,6 +65,12 @@ class AgentLoop:
         ]
         schemas = self._registry.schemas(self._platform)
 
+        # Actions already reported to the user straight from their tool result.
+        confirmed: list[str] = []
+        # Set once anything ran that only the model can put into words: a query,
+        # a failure, a denial. From then on its narration is the answer.
+        narration_needed = False
+
         for _ in range(self._max_iterations):
             if should_compact(messages, self._context_max_tokens, self._compact_threshold):
                 # Escalate keep_recent only as far as needed to drop below threshold
@@ -63,8 +80,16 @@ class AgentLoop:
                     if not should_compact(candidate, self._context_max_tokens, self._compact_threshold):
                         break
                 self._on_compact()
-            msg = self._chat(messages, schemas, on_sentence)
+
+            # After a turn of nothing but successful actions, the model's reply
+            # can only restate what the user has already heard, so do not speak
+            # it. The call itself still happens: that is where the second tool
+            # of a multi-step request comes from.
+            redundant = bool(confirmed) and not narration_needed
+            msg = self._chat(messages, schemas, None if redundant else on_sentence)
             if not getattr(msg, "tool_calls", None):
+                if redundant:
+                    return " ".join(confirmed)
                 return msg.content or ""
 
             messages.append(
@@ -85,13 +110,19 @@ class AgentLoop:
                 }
             )
             for tc in msg.tool_calls:
+                result = self._execute(tc.function.name, tc.function.arguments)
                 messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": self._execute(tc.function.name, tc.function.arguments),
-                    }
+                    {"role": "tool", "tool_call_id": tc.id, "content": result}
                 )
+                phrase = confirmation_for(
+                    tc.function.name, _decoded_args(tc.function.arguments), result
+                )
+                if phrase is None:
+                    narration_needed = True
+                    continue
+                confirmed.append(phrase)
+                if on_sentence is not None:
+                    on_sentence(phrase)
 
         limit = "I hit my step limit before finishing; here is where I stopped."
         if on_sentence is not None:
