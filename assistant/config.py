@@ -9,10 +9,14 @@ import yaml
 @dataclass
 class Config:
     llm_base_url: str = "http://localhost:11434/v1"
-    # Default chosen by the A/B in docs/model-ab.md: both models scored 10/10,
-    # but Qwen is ~3x faster and does not wander through irrelevant tools when
-    # no tool fits. Set to "muse-glimmer:30b" to switch back.
-    llm_model: str = "qwen3.8:27b"
+    # Default chosen by the three-way race in docs/model-ab.md. All three
+    # installed models score 10/10, so accuracy does not decide -- speed does.
+    # Nemotron is a mixture-of-experts (32.9B total, ~3B ACTIVE per token)
+    # against Qwen's dense 27B, so it decodes at 86.8 tok/s vs 14.8, and the
+    # full eval suite runs in 155.9s vs 285.1s. For the user that is a ~5s
+    # wait instead of ~20s. Set to "qwen3.8:27b" or "muse-glimmer:30b-mlx"
+    # to switch back; both are equally correct, just slower.
+    llm_model: str = "nemotron-3.5-lightning:30b-a3b-q4_K_M"
     llm_api_key: str = "ollama"  # Ollama ignores the value but the SDK requires one
     llm_timeout_seconds: float = 120.0
     # Reasoning models emit hidden thinking tokens before their first visible
@@ -104,8 +108,9 @@ _TEMPLATE = """\
 # Uncomment a line to change it, then restart the app.
 
 # The Ollama model to use. It must already be pulled:  ollama pull <name>
-# llm_model: qwen3.8:27b
-# llm_model: muse-glimmer:30b   # faster per token, but calls tools it does not need
+# llm_model: nemotron-3.5-lightning:30b-a3b-q4_K_M
+# llm_model: qwen3.8:27b           # also 10/10, but ~6x slower per token
+# llm_model: muse-glimmer:30b-mlx  # also 10/10, slowest of the three overall
 
 # llm_base_url: http://localhost:11434/v1
 

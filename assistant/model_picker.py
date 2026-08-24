@@ -39,7 +39,7 @@ def installed_models(fetch=None) -> list[str]:
 def _configured_model(config_path: Path) -> str | None:
     """Return the model only if it is ACTIVELY set, not merely mentioned.
 
-    The shipped template lists `# llm_model: qwen3.8:27b` as documentation.
+    The shipped template lists `# llm_model: nemotron-3.5-lightning:30b-a3b-q4_K_M` as documentation.
     Treating a commented line as a choice would mean never prompting anyone.
     """
     try:
