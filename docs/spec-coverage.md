@@ -73,12 +73,12 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
 
 | Clause | Status | Evidence |
 |---|---|---|
-| TDD throughout | ✅ | 285 tests; guard tests proven to fail on their specific bug. |
+| TDD throughout | ✅ | 481 tests; guard tests proven to fail on their specific bug. |
 | Unit: tools, schema round-trip, gate, sandbox profile | ✅ | Including write-outside-scope and network-egress denial. |
 | Integration: canned responses; MCP against pinned versions | ⚠️ | Canned-response integration ✅. MCP-against-pinned-server ✗ (no server adopted). |
 | Model gate (a): structured output | ✅ | Passes; no GGUF pin needed. |
 | Model gate (b): 10 evals vs both models | ✅ | 10/10 both. `docs/model-ab.md`. |
-| **Voice: ≤2.5s p50 to first TTS audio** | ✗ | **2.59s — misses by 0.09s.** `docs/latency.md`. Suppressing reasoning would clear it but was measured and rejected (10/10→9/10 plus `</think>` leaking into speech). |
+| **Voice: ≤2.5s p50 to first TTS audio** | ✗ | **Missed by ~10x, not by 0.09s.** Real turns are **14.5s** (one tool) to **23.9s** (no tool) to the first spoken word. The 2.59s previously reported here was measured with tool groups disabled on *"say hello"* — the easiest case the app supports, not a description of use. `docs/latency.md`. |
 
 ---
 
@@ -101,8 +101,15 @@ Legend: ✅ built · ⚠️ built differently than specified (with rationale) ·
    mechanism. See `docs/security-audit.md`.
 
 **Acceptance gate not met:**
-3. **Voice latency 2.59s vs 2.5s** — 0.09s over, cause understood, and the one
-   available fix measured and rejected (`docs/latency.md`).
+3. **Voice latency: 14.5–23.9s to first spoken word, against a 2.5s gate.** An
+   earlier revision of this document reported 2.59s and called it a 0.09s miss;
+   that figure came from a benchmark with tool groups disabled and does not
+   describe a real turn. ~60% of generated tokens are reasoning the user never
+   hears, and this model emits all of it before any content, so streaming cannot
+   help. Suppressing reasoning was measured and rejected (10/10→9/10, `</think>`
+   leaking into speech). Mitigated — not fixed — by speaking an acknowledgement
+   the moment the transcript lands. Closing this gate needs a different model.
+   (`docs/latency.md`)
 
 **Deliberately not built** (documented, with rationale): DFlash, streaming STT during hold, TTS fallbacks, AXUIElement reader, App Intents, MCP server adoption, Windows adapter.
 
